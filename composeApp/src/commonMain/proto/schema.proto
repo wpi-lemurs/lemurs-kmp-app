@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option java_package = "com.lemurs";
+option java_multiple_files = true;
+
+message JwtTokenResponse {
+      string lemursAccessToken = 1;
+      string refreshToken = 2;
+}
