@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">SharedLemurs</string>
+    <string name="home">Home</string>
+    <string name="profile">Profile</string>
+    <string name="progress">Progress</string>
+    <string name="history">History</string>
+    <string name="information">Information</string>
+    <string name="demographics">Demographics</string>
+    <string name="daily">Daily</string>
+    <string name="phq">PHQ</string>
+    <string name="writing">Writing</string>
+    <string name="audio">Audio</string>
+    <string name="submission">Submission</string>
+    <string name="resources">Resources</string>
+    <string name="dailyinformation">DailyInformation</string>
+    <string name="weeklyinformation">WeeklyInformation</string>
+</resources>

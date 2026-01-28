@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option java_package = "com.lemurs";
+option java_multiple_files = true;
+
+message HealthConnectTokens {
+      string stepsToken = 1;
+      string caloriesToken = 2;
+      string distanceToken = 3;
+      string speedToken = 4;
+      string sleepToken = 5;
+      string heartRateToken = 6;
+      string exerciseToken = 7;
+      string powerToken = 8;
+}
