@@ -1,10 +1,14 @@
 package com.lemurs.lemurs_app.data.api
 
 import co.touchlab.kermit.Logger
+import com.lemurs.lemurs_app.data.datastore.JwtTokenResponseImpl
 import com.lemurs.lemurs_app.ui.screens.LemurScreen
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 /**
  * iOS implementation of MicrosoftApiAuthorizationService.
@@ -23,6 +27,9 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     private val logger = Logger.withTag("MSAuth-iOS")
     private var navigationCallback: ((String) -> Unit)? = null
     private val mainScope = MainScope()
+
+    // Inject the token storage
+    private val jwtTokenResponseImpl: JwtTokenResponseImpl by inject()
 
     // Scopes are configured in Swift's MSALAuthHelper, kept here for reference
     @Suppress("unused")
@@ -98,8 +105,20 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 // Call backend to exchange token for JWT
                 mainScope.launch {
                     try {
-                        webApiService.accessWebApi(accessToken)
+                        val jwtTokenResponseJson = webApiService.accessWebApi(accessToken)
                         logger.i("Backend JWT exchange successful")
+
+                        // Save tokens to DataStore (like Android does)
+                        val lemursAccessToken = jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content
+                        val refreshToken = jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content
+
+                        if (lemursAccessToken != null && refreshToken != null) {
+                            jwtTokenResponseImpl.updateLemursAccessToken(lemursAccessToken)
+                            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
+                            logger.i("Tokens saved to DataStore")
+                        } else {
+                            logger.e("Failed to parse JWT tokens from response: $jwtTokenResponseJson")
+                        }
 
                         // Navigate to main screen
                         navigationCallback?.invoke(LemurScreen.Main.name)
@@ -135,8 +154,21 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
                 mainScope.launch {
                     try {
-                        webApiService.accessWebApi(accessToken)
+                        val jwtTokenResponseJson = webApiService.accessWebApi(accessToken)
                         logger.i("Backend JWT exchange successful (silent)")
+
+                        // Save tokens to DataStore (like Android does)
+                        val lemursAccessToken = jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content
+                        val refreshToken = jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content
+
+                        if (lemursAccessToken != null && refreshToken != null) {
+                            jwtTokenResponseImpl.updateLemursAccessToken(lemursAccessToken)
+                            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
+                            logger.i("Tokens saved to DataStore (silent)")
+                        } else {
+                            logger.e("Failed to parse JWT tokens from response: $jwtTokenResponseJson")
+                        }
+
                         navigationCallback?.invoke(LemurScreen.Main.name)
                     } catch (e: Exception) {
                         logger.e("Backend API call failed (silent): $e")

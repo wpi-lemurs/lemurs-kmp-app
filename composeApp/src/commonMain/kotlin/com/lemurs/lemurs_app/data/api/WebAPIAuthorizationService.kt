@@ -3,7 +3,6 @@ package com.lemurs.lemurs_app.data.api
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.datastore.JwtTokenResponseImpl
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
@@ -27,7 +26,7 @@ class WebAPIAuthorizationService : KoinComponent {
     val logger = Logger.withTag("MSAuth")
 
     //client and service for api call without authorization
-    private val httpClient = HttpClient() {
+    private val httpClient = createPlatformHttpClient {
         install(ContentNegotiation) {
             json()
         }
@@ -85,7 +84,7 @@ class WebAPIAuthorizationService : KoinComponent {
                     ).bodyAsText()
                 )).jsonObject.get("refreshToken")!!.jsonPrimitive.content
             }
-            return HttpClient(CIO) {
+            return createPlatformHttpClient {
                 install(HttpTimeout) {
                     requestTimeoutMillis = 60000 // 60 seconds timeout for requests
                     connectTimeoutMillis = 15000 // 15 seconds for connection
@@ -114,7 +113,7 @@ class WebAPIAuthorizationService : KoinComponent {
             }
         } catch (e: NullPointerException) {
             logger.w("exception: " + e.toString())
-            return HttpClient(CIO) {
+            return createPlatformHttpClient {
                 install(HttpTimeout) {
                     requestTimeoutMillis = 60000 // 60 seconds timeout for requests
                     connectTimeoutMillis = 15000 // 15 seconds for connection
