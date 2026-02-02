@@ -1,4 +1,4 @@
-rootProject.name = "LemursApp"
+rootProject.name = "Lemurs_App"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

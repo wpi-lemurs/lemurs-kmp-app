@@ -7,7 +7,11 @@ class IosUriOpener : UriOpener {
     override fun openUri(uri: String) {
         val nsUrl = NSURL.URLWithString(uri)
         if (nsUrl != null) {
-            UIApplication.sharedApplication.openURL(nsUrl)
+            UIApplication.sharedApplication.openURL(nsUrl, emptyMap<Any?, Any?>()) { success ->
+                if (!success) {
+                    println("⚠️ Failed to open URL: $uri")
+                }
+            }
         }
     }
 }
