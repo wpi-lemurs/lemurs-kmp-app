@@ -126,8 +126,8 @@ kotlin {
         }
 
         iosMain.dependencies {
-            // Ktor iOS engine
-            implementation(libs.ktor.client.ios)
+            // Ktor iOS engine - Darwin supports TLS on native platforms
+            implementation(libs.ktor.client.darwin)
         }
 
         commonTest.dependencies {
