@@ -67,18 +67,28 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
     val surveyAvailabilityViewModel: SurveyAvailabilityViewModel = koinViewModel()
     val progressViewModel: ProgressViewModel = koinViewModel()
     val coroutineScope = rememberCoroutineScope()
-    val onNextButtonClicked: () -> Unit = {
 
-        // Added coroutine Scope
+    // Track submission state to prevent multiple submissions
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    val handleSubmission: () -> Unit = {
         coroutineScope.launch {
-            viewModel.addTextPromptRequest(text, writingViewModel)
-            viewModel.executeRequests()
-            progressViewModel.refreshProgress()
-            surveyAvailabilityViewModel.refreshAvailability()
-
+            if (!isSubmitting) {
+                isSubmitting = true
+                try {
+                    viewModel.addTextPromptRequest(text, writingViewModel)
+                    viewModel.executeRequests()
+                    // Refresh progress data like daily screen does
+                    progressViewModel.refreshProgress()
+                    progressViewModel.newRefreshProgress()
+                    surveyAvailabilityViewModel.refreshAvailability()
+                    submissionViewModel.markItemCompleted("Writing Prompt", "1.50")
+                    onNavigateTo(LemurScreen.Audio.name)
+                } finally {
+                    isSubmitting = false
+                }
+            }
         }
-        onNavigateTo(LemurScreen.Audio.name)
-        submissionViewModel.markItemCompleted("Writing Prompt", "1.50")
     }
 
     // --- Start of Weekly Question Logic ---
@@ -212,8 +222,9 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
 
             BottomBar(
 
-                onBottomBarClick = onNextButtonClicked,
-                isClickable = writingCompleted.value
+                onBottomBarClick = handleSubmission,
+                isClickable = writingCompleted.value && !isSubmitting,
+                text = if (isSubmitting) "Submitting..." else ""
             )
 
         }

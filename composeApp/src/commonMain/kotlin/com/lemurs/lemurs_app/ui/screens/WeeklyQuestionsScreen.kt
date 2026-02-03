@@ -11,13 +11,17 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.ui.reusableComponents.QuestionFactory
 import com.lemurs.lemurs_app.ui.viewmodel.SubmissionViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WeeklyQuestionsViewModel
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -26,16 +30,30 @@ fun WeeklyQuestionsScreen(onNavigateTo: (String) -> Unit) {
   val viewModel: WeeklyQuestionsViewModel = koinViewModel()
   val logger = Logger.withTag("WeeklyQuestionsScreen")
   val submissionViewModel: SubmissionViewModel = koinInject()
+  val coroutineScope = rememberCoroutineScope()
+
+  // Track submission state to prevent multiple submissions
+  var isSubmitting by remember { mutableStateOf(false) }
+
   // Don't clear items here - it interferes with submission screen display
   // submissionViewModel.clearSurveyItems()
   // Show a loading indicator while the survey data is being fetched
   if (viewModel.surveys.value == null) {
     CircularProgressIndicator()
   } else {
-    val onNextButtonClicked: () -> Unit = {
-      submissionViewModel.markItemCompleted("PHQ-9", "2.00")
-      onNavigateTo(LemurScreen.Writing.name)
-      viewModel.executeRequests()
+    val handleSubmission: () -> Unit = {
+      coroutineScope.launch {
+        if (!isSubmitting) {
+          isSubmitting = true
+          try {
+            submissionViewModel.markItemCompleted("PHQ-9", "2.00")
+            viewModel.executeRequests()
+            onNavigateTo(LemurScreen.Writing.name)
+          } finally {
+            isSubmitting = false
+          }
+        }
+      }
     }
 
     logger.w(" the survey count is: ${viewModel.surveyAnswers.value.size}")
@@ -97,7 +115,8 @@ fun WeeklyQuestionsScreen(onNavigateTo: (String) -> Unit) {
           )
         }
       }
-      BottomBar(onBottomBarClick = onNextButtonClicked, isClickable = isCompleted)
+      BottomBar(onBottomBarClick = handleSubmission, isClickable = isCompleted && !isSubmitting,
+        text = if (isSubmitting) "Submitting..." else "")
     }
   }
 }
