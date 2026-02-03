@@ -12,8 +12,6 @@ import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseWeeklySurvey
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -153,33 +151,31 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         return notificationsStart
     }
 
-    fun executeRequests() {
+    suspend fun executeRequests() {
         if (_requestStack1.value.isEmpty()) {
             logger.d { "No requests to execute" }
             return
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                logger.d { "Submitting survey first to get surveyResponseId" }
-                // Submit survey and wait for the response
-                submitSurvey { surveyResponseId ->
-                    logger.d { "Survey submitted successfully, now executing ${_requestStack1.value.size} queued requests with surveyResponseId: $surveyResponseId" }
-                    // Execute all queued requests with the surveyResponseId
-                    for (request in _requestStack1.value) {
-                        try {
-                            logger.d { "Invoking request with surveyResponseId: $surveyResponseId" }
-                            request.invoke(surveyResponseId)
-                        } catch (e: Exception) {
-                            logger.e("Error executing request: ${e.message}", e)
-                        }
+        try {
+            logger.d { "Submitting survey first to get surveyResponseId" }
+            // Submit survey and wait for the response
+            submitSurvey { surveyResponseId ->
+                logger.d { "Survey submitted successfully, now executing ${_requestStack1.value.size} queued requests with surveyResponseId: $surveyResponseId" }
+                // Execute all queued requests with the surveyResponseId
+                for (request in _requestStack1.value) {
+                    try {
+                        logger.d { "Invoking request with surveyResponseId: $surveyResponseId" }
+                        request.invoke(surveyResponseId)
+                    } catch (e: Exception) {
+                        logger.e("Error executing request: ${e.message}", e)
                     }
-                    clearRequests()
                 }
-            } catch (e: Exception) {
-                logger.e("Error in executeRequests: ${e.message}", e)
                 clearRequests()
             }
+        } catch (e: Exception) {
+            logger.e("Error in executeRequests: ${e.message}", e)
+            clearRequests()
         }
     }
 
@@ -250,14 +246,12 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
     }
     suspend fun submitAllWeeklyData() {
-        viewModelScope.launch {
-            if(appRepository.handleSurveyResponse()){
-                logger.d { "All weekly data submitted successfully" }
-            }
-            else {
-                logger.e { "Failed to submit all weekly data" }
-                SendDataScheduler().scheduleSurveyResponse()
-            }
+        if(appRepository.handleSurveyResponse()){
+            logger.d { "All weekly data submitted successfully" }
+        }
+        else {
+            logger.e { "Failed to submit all weekly data" }
+            SendDataScheduler().scheduleSurveyResponse()
         }
     }
 }
