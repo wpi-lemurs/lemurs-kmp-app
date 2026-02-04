@@ -1,5 +1,10 @@
 package com.lemurs.lemurs_app.ui.screens
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 //import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -115,15 +121,41 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(48.dp))
 
+            // Floating animation for the button
+            val infiniteTransition = rememberInfiniteTransition(label = "float")
+            val floatOffset = infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 16f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 800),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "floatOffset"
+            )
+            val scaleAnim = infiniteTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.05f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 800),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "scale"
+            )
+
             // Microsoft Login Button
             Button(
                 onClick = { microsoftService.acquireToken() },
                 colors = ButtonDefaults.buttonColors(containerColor = LemurWhite),
                 shape = RoundedCornerShape(8.dp),
-                elevation = ButtonDefaults.buttonElevation(4.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp, pressedElevation = 2.dp),
                 modifier = Modifier
                     .padding(8.dp)
                     .height(60.dp)
+                    .graphicsLayer {
+                        translationY = -floatOffset.value
+                        scaleX = scaleAnim.value
+                        scaleY = scaleAnim.value
+                    }
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
