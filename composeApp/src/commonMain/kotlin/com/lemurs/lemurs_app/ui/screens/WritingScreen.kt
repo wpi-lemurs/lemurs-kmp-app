@@ -41,9 +41,6 @@ import com.lemurs.lemurs_app.ui.viewmodel.SubmissionViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WeeklyQuestionsViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WritingViewModel
 import androidx.compose.runtime.rememberCoroutineScope
-import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
-import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 // Import Calendar
@@ -63,9 +60,6 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     val writingCompleted = rememberSaveable { mutableStateOf(text.length > 10) }
     val submissionViewModel: SubmissionViewModel = koinInject()
-    // added this ----
-    val surveyAvailabilityViewModel: SurveyAvailabilityViewModel = koinViewModel()
-    val progressViewModel: ProgressViewModel = koinViewModel()
     val coroutineScope = rememberCoroutineScope()
 
     // Track submission state to prevent multiple submissions
@@ -78,10 +72,6 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
                 try {
                     viewModel.addTextPromptRequest(text, writingViewModel)
                     viewModel.executeRequests()
-                    // Refresh progress data like daily screen does
-                    progressViewModel.refreshProgress()
-                    progressViewModel.newRefreshProgress()
-                    surveyAvailabilityViewModel.refreshAvailability()
                     submissionViewModel.markItemCompleted("Writing Prompt", "1.50")
                     onNavigateTo(LemurScreen.Audio.name)
                 } finally {
