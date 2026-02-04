@@ -9,7 +9,7 @@ import com.lemurs.lemurs_app.data.AndroidActivityLauncherProvider.logger
 import com.lemurs.lemurs_app.data.AndroidContextProvider
 import java.util.concurrent.TimeUnit
 
-class HealthDataScheduler {
+actual class HealthDataScheduler {
 
     private fun getConstraints(): Constraints {
         val constraints = Constraints.Builder()
@@ -22,7 +22,7 @@ class HealthDataScheduler {
     private val workManager = WorkManager.getInstance(context)
 
 
-    fun scheduleHealth() {
+    actual fun scheduleHealth() {
         logger.w("scheduling health data in worker")
         val request =
             // Minimum interval for PeriodicWorkRequest is 15 minutes
@@ -38,7 +38,7 @@ class HealthDataScheduler {
      * For debugging/testing: Run the health worker immediately once
      * This is useful for testing without waiting 15 minutes
      */
-    fun scheduleOneTime() {
+    actual fun scheduleOneTime() {
         logger.w("scheduling one-time health data worker for immediate execution")
         val request = OneTimeWorkRequestBuilder<HealthDataWorker>()
             .setConstraints(getConstraints())
