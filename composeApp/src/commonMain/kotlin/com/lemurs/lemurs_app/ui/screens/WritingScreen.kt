@@ -1,6 +1,7 @@
 package com.lemurs.lemurs_app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +24,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,18 +67,28 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
     val surveyAvailabilityViewModel: SurveyAvailabilityViewModel = koinViewModel()
     val progressViewModel: ProgressViewModel = koinViewModel()
     val coroutineScope = rememberCoroutineScope()
-    val onNextButtonClicked: () -> Unit = {
 
-        // Added coroutine Scope
+    // Track submission state to prevent multiple submissions
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    val handleSubmission: () -> Unit = {
         coroutineScope.launch {
-            viewModel.addTextPromptRequest(text, writingViewModel)
-            viewModel.executeRequests()
-            progressViewModel.refreshProgress()
-            surveyAvailabilityViewModel.refreshAvailability()
-
+            if (!isSubmitting) {
+                isSubmitting = true
+                try {
+                    viewModel.addTextPromptRequest(text, writingViewModel)
+                    viewModel.executeRequests()
+                    // Refresh progress data like daily screen does
+                    progressViewModel.refreshProgress()
+                    progressViewModel.newRefreshProgress()
+                    surveyAvailabilityViewModel.refreshAvailability()
+                    submissionViewModel.markItemCompleted("Writing Prompt", "1.50")
+                    onNavigateTo(LemurScreen.Audio.name)
+                } finally {
+                    isSubmitting = false
+                }
+            }
         }
-        onNavigateTo(LemurScreen.Audio.name)
-        submissionViewModel.markItemCompleted("Writing Prompt", "1.50")
     }
 
     // --- Start of Weekly Question Logic ---
@@ -114,9 +127,16 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
     }
     // --- End of Weekly Question Logic ---
 
+    val focusManager = LocalFocusManager.current
+
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    focusManager.clearFocus()
+                })
+            }
     ) {
         Column(
             modifier = Modifier
@@ -202,8 +222,9 @@ fun WritingScreen(onNavigateTo: (String) -> Unit) {
 
             BottomBar(
 
-                onBottomBarClick = onNextButtonClicked,
-                isClickable = writingCompleted.value
+                onBottomBarClick = handleSubmission,
+                isClickable = writingCompleted.value && !isSubmitting,
+                text = if (isSubmitting) "Submitting..." else ""
             )
 
         }

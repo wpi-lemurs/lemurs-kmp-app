@@ -77,18 +77,28 @@ actual fun AudioScreen(onNavigateTo: (String) -> Unit) {
   val coroutineScope = rememberCoroutineScope()
   val submissionViewModel: SubmissionViewModel = koinInject()
 
-  val onNextButtonClicked: () -> Unit = {
+  // Track submission state to prevent multiple submissions
+  var isSubmitting by remember { mutableStateOf(false) }
 
+  val handleSubmission: () -> Unit = {
     coroutineScope.launch {
-      viewModel.addAudioRequest(audioViewModel)
-      viewModel.executeRequests()
-      progressViewModel.refreshProgress()
-      surveyAvailabilityViewModel.refreshAvailability()
-      viewModel.submitAllWeeklyData()
+      if (!isSubmitting) {
+        isSubmitting = true
+        try {
+          viewModel.addAudioRequest(audioViewModel)
+          viewModel.executeRequests()
+          // Refresh progress data like daily screen does
+          progressViewModel.refreshProgress()
+          progressViewModel.newRefreshProgress()
+          surveyAvailabilityViewModel.refreshAvailability()
+          viewModel.submitAllWeeklyData()
+          submissionViewModel.markItemCompleted("Audio Prompt", "1.50")
+          onNavigateTo(LemurScreen.Submission.name)
+        } finally {
+          isSubmitting = false
+        }
+      }
     }
-    //submissionViewModel.setSurveyType("Weekly")
-    submissionViewModel.markItemCompleted("Audio Prompt", "1.50")
-    onNavigateTo(LemurScreen.Submission.name)
   }
 
   var isRecording by remember { mutableStateOf(false) }
@@ -303,7 +313,7 @@ actual fun AudioScreen(onNavigateTo: (String) -> Unit) {
       }
     }
     Column(modifier = Modifier.fillMaxWidth().align(alignment = Alignment.BottomCenter)) {
-      BottomBar(onBottomBarClick = onNextButtonClicked, isClickable = isCompleted.value, text = "Complete Survey")
+      BottomBar(onBottomBarClick = handleSubmission, isClickable = isCompleted.value && !isSubmitting, text = if (isSubmitting) "Submitting..." else "Complete Survey")
     }
   }
 }
