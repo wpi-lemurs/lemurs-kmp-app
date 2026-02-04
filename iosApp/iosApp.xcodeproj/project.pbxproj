@@ -22,7 +22,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Auth/README.md,
-				HealthKit/README.md,
 				Info.plist,
 			);
 			target = CE24FE44F6C7386D41B4A3B3 /* iosApp */;
