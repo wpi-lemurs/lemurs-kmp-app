@@ -87,12 +87,13 @@ actual fun AudioScreen(onNavigateTo: (String) -> Unit) {
         try {
           viewModel.addAudioRequest(audioViewModel)
           viewModel.executeRequests()
-          // Refresh progress data like daily screen does
+          // Submit all weekly data FIRST before refreshing (like daily screen pattern)
+          viewModel.submitAllWeeklyData()
+          submissionViewModel.markItemCompleted("Audio Prompt", "1.50")
+          // Refresh progress data AFTER submission is complete
           progressViewModel.refreshProgress()
           progressViewModel.newRefreshProgress()
           surveyAvailabilityViewModel.refreshAvailability()
-          viewModel.submitAllWeeklyData()
-          submissionViewModel.markItemCompleted("Audio Prompt", "1.50")
           onNavigateTo(LemurScreen.Submission.name)
         } finally {
           isSubmitting = false
