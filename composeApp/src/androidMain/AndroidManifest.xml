@@ -59,7 +59,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:host="com.lemurs"
-                    android:path="/WpI3XjEgA4i6DrVrle+my9uS4yw="
+                    android:path="/eDGA8nYbBjK0xbfLpARG7LlolfU="
                     android:scheme="msauth" />
             </intent-filter>
             <intent-filter>
