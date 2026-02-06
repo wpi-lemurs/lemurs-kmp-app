@@ -23,6 +23,8 @@
 		<string>msauthv2</string>
 		<string>msauthv3</string>
 	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app needs access to your health data to track your activity, including steps, calories burned, distance, and walking speed. This data will be collected even when the app is in the background to provide you with accurate health insights.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
