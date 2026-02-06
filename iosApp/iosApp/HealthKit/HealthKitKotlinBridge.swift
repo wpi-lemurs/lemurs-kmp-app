@@ -29,6 +29,10 @@ import ComposeApp
         if let sleep = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) {
             types.insert(sleep)
         }
+        // Walking speed for passive background collection
+        if let walkingSpeed = HKQuantityType.quantityType(forIdentifier: .walkingSpeed) {
+            types.insert(walkingSpeed)
+        }
 
         return types
     }()
