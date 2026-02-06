@@ -108,6 +108,24 @@ actual class HealthDataScheduler {
     }
 
     /**
+     * Reset sync state by clearing all stored anchors.
+     * This will cause the next sync to fetch all historical data.
+     * Useful for debugging or if sync state becomes corrupted.
+     */
+    fun resetSyncState() {
+        logger.i("Resetting health data sync state (clearing all anchors)")
+
+        val bridge = IOSHealthDataSchedulerProvider.bridge
+        if (bridge == null) {
+            logger.w("Health data scheduler bridge not available")
+            return
+        }
+
+        bridge.clearAllAnchors()
+        logger.i("Sync state reset - next sync will fetch all historical data")
+    }
+
+    /**
      * Fallback: perform immediate sync directly via HealthKit bridge
      */
     private fun performImmediateSync() {
@@ -142,6 +160,11 @@ actual class HealthDataScheduler {
 /**
  * Interface for iOS health data scheduler bridge.
  * Implemented in Swift (HealthDataTaskScheduler.swift).
+ *
+ * Uses HKAnchoredObjectQuery for incremental, granular data collection:
+ * - No duplicates (anchor tracks what's been processed)
+ * - No missing samples
+ * - Exact sample-level granularity
  */
 interface IOSHealthDataSchedulerBridge {
     /**
@@ -176,6 +199,12 @@ interface IOSHealthDataSchedulerBridge {
      * Stop all observer queries.
      */
     fun stopObserverQueries()
+
+    /**
+     * Clear all stored anchors (useful for resetting sync state).
+     * This will cause the next sync to fetch all historical data.
+     */
+    fun clearAllAnchors()
 }
 
 /**
@@ -263,9 +292,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val stepsDto = StepsDataDto(
                     userId = "",
@@ -293,9 +322,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val caloriesDto = CaloriesDataDto(
                     userId = "",
@@ -323,9 +352,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val distanceDto = DistanceDataDto(
                     userId = "",
@@ -353,9 +382,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val speedDto = SpeedDataDto(
                     userId = "",
