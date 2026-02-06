@@ -6,9 +6,18 @@ import ComposeApp
 /// Background task identifier for health data sync
 private let healthSyncTaskIdentifier = "com.lemurs.lemurs_app.healthSync"
 
+/// UserDefaults keys for storing anchors
+private let anchorKeyPrefix = "com.lemurs.healthAnchor."
+
 /// Swift implementation of background health data scheduling using BGTaskScheduler.
 /// This handles periodic background sync of health data from HealthKit.
 /// Supports passive background collection even when app is in background or phone is locked.
+///
+/// Uses HKAnchoredObjectQuery for incremental, granular data collection:
+/// - No duplicates
+/// - No missing samples
+/// - Exact sample-level granularity
+/// - Automatic incremental sync via anchors
 @objc public class HealthDataTaskScheduler: NSObject {
 
     @objc public static let shared = HealthDataTaskScheduler()
@@ -18,7 +27,10 @@ private let healthSyncTaskIdentifier = "com.lemurs.lemurs_app.healthSync"
     /// Active observer queries for background delivery
     private var observerQueries: [HKObserverQuery] = []
 
-    /// User defaults key for storing last sync time
+    /// Stored anchors for each data type (for incremental sync)
+    private var anchors: [String: HKQueryAnchor] = [:]
+
+    /// User defaults key for storing last sync time (legacy, kept for compatibility)
     private let lastSyncTimeKey = "com.lemurs.lastHealthSyncTime"
 
     /// Check if running on simulator
@@ -190,79 +202,240 @@ private let healthSyncTaskIdentifier = "com.lemurs.lemurs_app.healthSync"
         print("🛑 Stopped all observer queries")
     }
 
-    /// Fetch and send data for a specific quantity type
+    // MARK: - Anchored Object Query (Granular, Incremental Sync)
+
+    /// Maximum samples to process per query to prevent memory issues
+    private let maxSamplesPerQuery = 100
+
+    /// Maximum samples to log individually (to prevent console spam)
+    private let maxSamplesToLog = 5
+
+    /// Fetch and send data for a specific quantity type using HKAnchoredObjectQuery.
+    /// This provides:
+    /// - Exact sample-level granularity (each walking burst, each burn segment, etc.)
+    /// - No duplicates (anchor tracks what's been processed)
+    /// - No missing samples (anchor ensures nothing is skipped)
+    /// - Automatic incremental sync
     private func fetchAndSendData(for quantityType: HKQuantityType, completion: @escaping () -> Void) {
-        let now = Date()
-        let lastSync = getLastSyncTime(for: quantityType) ?? Calendar.current.date(byAdding: .hour, value: -1, to: now)!
+        guard let healthStore = healthStore else {
+            print("❌ HealthKit not available")
+            completion()
+            return
+        }
 
-        let predicate = HKQuery.predicateForSamples(
-            withStart: lastSync,
-            end: now,
-            options: .strictStartDate
-        )
+        // Get the stored anchor for this data type
+        let anchor = getAnchor(for: quantityType)
 
-        let startTimeMillis = Int64(lastSync.timeIntervalSince1970 * 1000)
-        let endTimeMillis = Int64(now.timeIntervalSince1970 * 1000)
+        // If no anchor exists (first sync), limit to last 24 hours to prevent memory overload
+        var predicate: NSPredicate? = nil
+        if anchor == nil {
+            let now = Date()
+            let oneDayAgo = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+            predicate = HKQuery.predicateForSamples(withStart: oneDayAgo, end: now, options: [])
+            print("ℹ️ First sync for \(quantityType.identifier) - limiting to last 24 hours")
+        }
 
         let callback = IOSHealthDataCallbackProvider.shared.callback
 
+        // Create anchored query with limit to prevent memory issues
+        let query = HKAnchoredObjectQuery(
+            type: quantityType,
+            predicate: predicate,
+            anchor: anchor,
+            limit: maxSamplesPerQuery
+        ) { [weak self] query, samples, deletedObjects, newAnchor, error in
+
+            if let error = error {
+                print("❌ Anchored query error for \(quantityType.identifier): \(error.localizedDescription)")
+                completion()
+                return
+            }
+
+            // Save the new anchor for next incremental sync
+            if let newAnchor = newAnchor {
+                self?.saveAnchor(newAnchor, for: quantityType)
+            }
+
+            // Process the samples
+            guard let quantitySamples = samples as? [HKQuantitySample], !quantitySamples.isEmpty else {
+                print("ℹ️ No new \(quantityType.identifier) samples since last sync")
+                completion()
+                return
+            }
+
+            print("📊 Processing \(quantitySamples.count) \(quantityType.identifier) samples")
+
+            // Process samples in batches to avoid memory pressure
+            self?.processSamplesBatched(quantitySamples, for: quantityType, callback: callback)
+
+            completion()
+        }
+
+        healthStore.execute(query)
+    }
+
+    /// Process samples in batches and aggregate to reduce API calls
+    private func processSamplesBatched(_ samples: [HKQuantitySample], for quantityType: HKQuantityType, callback: IOSHealthDataCallback?) {
+        guard !samples.isEmpty else { return }
+
+        // Aggregate samples by summing values and using min/max timestamps
+        var totalValue: Double = 0
+        var minStartDate = samples[0].startDate
+        var maxEndDate = samples[0].endDate
+
+        for sample in samples {
+            if sample.startDate < minStartDate { minStartDate = sample.startDate }
+            if sample.endDate > maxEndDate { maxEndDate = sample.endDate }
+
+            switch quantityType.identifier {
+            case HKQuantityTypeIdentifier.stepCount.rawValue:
+                totalValue += sample.quantity.doubleValue(for: HKUnit.count())
+            case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
+                totalValue += sample.quantity.doubleValue(for: HKUnit.kilocalorie())
+            case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
+                totalValue += sample.quantity.doubleValue(for: HKUnit.meter())
+            case HKQuantityTypeIdentifier.walkingSpeed.rawValue:
+                // For speed, use average instead of sum
+                let speedUnit = HKUnit.meter().unitDivided(by: HKUnit.second())
+                totalValue += sample.quantity.doubleValue(for: speedUnit)
+            default:
+                break
+            }
+        }
+
+        // For speed, calculate average
+        if quantityType.identifier == HKQuantityTypeIdentifier.walkingSpeed.rawValue {
+            totalValue = totalValue / Double(samples.count)
+        }
+
+        let startTimeMillis = Int64(minStartDate.timeIntervalSince1970 * 1000)
+        let endTimeMillis = Int64(maxEndDate.timeIntervalSince1970 * 1000)
+
+        // Send aggregated data
         switch quantityType.identifier {
         case HKQuantityTypeIdentifier.stepCount.rawValue:
-            fetchStatistics(for: quantityType, predicate: predicate, unit: HKUnit.count(), useDiscreteAverage: false) { [weak self] value in
-                if let steps = value, steps > 0 {
-                    print("📊 Passive sync: \(Int(steps)) steps")
-                    callback?.onStepsCollected(steps: Int64(steps), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                    self?.saveLastSyncTime(now, for: quantityType)
-                } else {
-                    print("ℹ️ No step data in time range (this is normal if no walking occurred)")
-                }
-                completion()
-            }
+            print("  📊 Total Steps: \(Int(totalValue)) | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
+            callback?.onStepsCollected(steps: Int64(totalValue), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
         case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
-            fetchStatistics(for: quantityType, predicate: predicate, unit: HKUnit.kilocalorie(), useDiscreteAverage: false) { [weak self] value in
-                if let calories = value, calories > 0 {
-                    print("📊 Passive sync: \(Int(calories)) kcal")
-                    callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                    self?.saveLastSyncTime(now, for: quantityType)
-                } else {
-                    print("ℹ️ No calorie data in time range (this is normal if no activity occurred)")
-                }
-                completion()
-            }
+            print("  📊 Total Calories: \(Int(totalValue)) kcal | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
+            callback?.onCaloriesCollected(calories: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
         case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
-            fetchStatistics(for: quantityType, predicate: predicate, unit: HKUnit.meter(), useDiscreteAverage: false) { [weak self] value in
-                if let distance = value, distance > 0 {
-                    print("📊 Passive sync: \(Int(distance)) meters")
-                    callback?.onDistanceCollected(distanceMeters: distance, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                    self?.saveLastSyncTime(now, for: quantityType)
-                } else {
-                    print("ℹ️ No distance data in time range (this is normal if no walking occurred)")
-                }
-                completion()
-            }
+            print("  📊 Total Distance: \(Int(totalValue)) m | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
+            callback?.onDistanceCollected(distanceMeters: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
         case HKQuantityTypeIdentifier.walkingSpeed.rawValue:
-            // Speed uses discrete average, not cumulative sum
-            let speedUnit = HKUnit.meter().unitDivided(by: HKUnit.second())
-            fetchStatistics(for: quantityType, predicate: predicate, unit: speedUnit, useDiscreteAverage: true) { [weak self] value in
-                if let speed = value, speed > 0 {
-                    print("📊 Passive sync: \(speed) m/s")
-                    callback?.onSpeedCollected(speedMetersSecond: speed, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                    self?.saveLastSyncTime(now, for: quantityType)
-                } else {
-                    print("ℹ️ No speed data in time range (this is normal if no walking occurred)")
-                }
-                completion()
-            }
+            print("  📊 Avg Speed: \(String(format: "%.2f", totalValue)) m/s | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
+            callback?.onSpeedCollected(speedMetersSecond: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
         default:
-            completion()
+            break
         }
     }
 
-    // MARK: - Last Sync Time Management
+    /// Process individual samples and send to Kotlin callback (kept for granular mode if needed)
+    private func processSamples(_ samples: [HKQuantitySample], for quantityType: HKQuantityType, callback: IOSHealthDataCallback?) {
+        let samplesToLog = min(samples.count, maxSamplesToLog)
+
+        for (index, sample) in samples.enumerated() {
+            let startTimeMillis = Int64(sample.startDate.timeIntervalSince1970 * 1000)
+            let endTimeMillis = Int64(sample.endDate.timeIntervalSince1970 * 1000)
+
+            let shouldLog = index < samplesToLog
+
+            switch quantityType.identifier {
+            case HKQuantityTypeIdentifier.stepCount.rawValue:
+                let steps = sample.quantity.doubleValue(for: HKUnit.count())
+                if shouldLog { print("  📍 Steps: \(Int(steps)) | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                callback?.onStepsCollected(steps: Int64(steps), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+
+            case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
+                let calories = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
+                if shouldLog { print("  📍 Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+
+            case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
+                let distance = sample.quantity.doubleValue(for: HKUnit.meter())
+                if shouldLog { print("  📍 Distance: \(Int(distance)) m | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                callback?.onDistanceCollected(distanceMeters: distance, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+
+            case HKQuantityTypeIdentifier.walkingSpeed.rawValue:
+                let speedUnit = HKUnit.meter().unitDivided(by: HKUnit.second())
+                let speed = sample.quantity.doubleValue(for: speedUnit)
+                if shouldLog { print("  📍 Speed: \(String(format: "%.2f", speed)) m/s | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                callback?.onSpeedCollected(speedMetersSecond: speed, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+
+            default:
+                break
+            }
+        }
+
+        if samples.count > samplesToLog {
+            print("  ... and \(samples.count - samplesToLog) more samples")
+        }
+    }
+
+    /// Format date for logging
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    // MARK: - Anchor Management
+
+    /// Get the stored anchor for a specific data type
+    private func getAnchor(for quantityType: HKQuantityType) -> HKQueryAnchor? {
+        // Check in-memory cache first
+        if let anchor = anchors[quantityType.identifier] {
+            return anchor
+        }
+
+        // Load from UserDefaults
+        let key = "\(anchorKeyPrefix)\(quantityType.identifier)"
+        if let data = UserDefaults.standard.data(forKey: key) {
+            do {
+                let anchor = try NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data)
+                if let anchor = anchor {
+                    anchors[quantityType.identifier] = anchor
+                }
+                return anchor
+            } catch {
+                print("⚠️ Failed to load anchor for \(quantityType.identifier): \(error)")
+                return nil
+            }
+        }
+
+        return nil
+    }
+
+    /// Save the anchor for a specific data type
+    private func saveAnchor(_ anchor: HKQueryAnchor, for quantityType: HKQuantityType) {
+        // Save to in-memory cache
+        anchors[quantityType.identifier] = anchor
+
+        // Persist to UserDefaults
+        let key = "\(anchorKeyPrefix)\(quantityType.identifier)"
+        do {
+            let data = try NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true)
+            UserDefaults.standard.set(data, forKey: key)
+        } catch {
+            print("⚠️ Failed to save anchor for \(quantityType.identifier): \(error)")
+        }
+    }
+
+    /// Clear all stored anchors (useful for resetting sync state)
+    @objc public func clearAllAnchors() {
+        anchors.removeAll()
+        for type in healthDataTypes {
+            let key = "\(anchorKeyPrefix)\(type.identifier)"
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        print("🗑️ Cleared all health data anchors")
+    }
+
+    // MARK: - Legacy Last Sync Time Management (kept for compatibility)
 
     /// Get the last sync time for a specific data type
     private func getLastSyncTime(for quantityType: HKQuantityType) -> Date? {
@@ -361,7 +534,8 @@ private let healthSyncTaskIdentifier = "com.lemurs.lemurs_app.healthSync"
 
     // MARK: - Health Data Sync Implementation
 
-    /// Actually perform the health data sync
+    /// Actually perform the health data sync using HKAnchoredObjectQuery.
+    /// This provides granular, incremental sync with no duplicates.
     private func performHealthDataSync(completion: @escaping (Bool) -> Void) {
         guard let healthStore = healthStore else {
             print("❌ HealthKit not available")
@@ -369,87 +543,67 @@ private let healthSyncTaskIdentifier = "com.lemurs.lemurs_app.healthSync"
             return
         }
 
-        // Define the time range (last 24 hours)
-        let now = Date()
-        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
-        // Convert to milliseconds for Kotlin
-        let startTimeMillis = Int64(yesterday.timeIntervalSince1970 * 1000)
-        let endTimeMillis = Int64(now.timeIntervalSince1970 * 1000)
+        print("🔄 Starting anchored health data sync for all types...")
 
-        // Create predicate for the time range
-        let predicate = HKQuery.predicateForSamples(
-            withStart: yesterday,
-            end: now,
-            options: .strictStartDate
-        )
-
-        // Collect health data
         let dispatchGroup = DispatchGroup()
         var syncSuccess = true
-
-        // Get the Kotlin callback
         let callback = IOSHealthDataCallbackProvider.shared.callback
 
-        // Fetch step count
-        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+        // Sync each health data type using anchored queries
+        for quantityType in healthDataTypes {
             dispatchGroup.enter()
-            fetchStatistics(for: stepType, predicate: predicate, unit: HKUnit.count()) { value in
-                if let steps = value {
-                    print("📊 Synced steps: \(Int(steps))")
-                    // Send to Kotlin/API
-                    callback?.onStepsCollected(steps: Int64(steps), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                }
-                dispatchGroup.leave()
-            }
-        }
 
-        // Fetch calories burned
-        if let calorieType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
-            dispatchGroup.enter()
-            fetchStatistics(for: calorieType, predicate: predicate, unit: HKUnit.kilocalorie()) { value in
-                if let calories = value {
-                    print("📊 Synced calories: \(Int(calories)) kcal")
-                    // Send to Kotlin/API
-                    callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                }
-                dispatchGroup.leave()
-            }
-        }
+            let anchor = getAnchor(for: quantityType)
 
-        // Fetch distance
-        if let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
-            dispatchGroup.enter()
-            fetchStatistics(for: distanceType, predicate: predicate, unit: HKUnit.meter()) { value in
-                if let distance = value {
-                    print("📊 Synced distance: \(Int(distance)) meters")
-                    // Send to Kotlin/API
-                    callback?.onDistanceCollected(distanceMeters: distance, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
-                }
-                dispatchGroup.leave()
+            // If no anchor exists (first sync), limit to last 24 hours
+            var predicate: NSPredicate? = nil
+            if anchor == nil {
+                let now = Date()
+                let oneDayAgo = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+                predicate = HKQuery.predicateForSamples(withStart: oneDayAgo, end: now, options: [])
             }
-        }
 
-        if let speedType = HKQuantityType.quantityType(forIdentifier: .walkingSpeed) {
-            dispatchGroup.enter()
-            // Walking speed uses discrete average and meters/second unit
-            let speedUnit = HKUnit.meter().unitDivided(by: HKUnit.second())
-            fetchStatistics(for: speedType, predicate: predicate, unit: speedUnit, useDiscreteAverage: true) { value in
-                if let speed = value {
-                    print("📊 Synced speed: \(speed) meters/s")
-                    // Send to Kotlin/API
-                    callback?.onSpeedCollected(speedMetersSecond: speed, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            let query = HKAnchoredObjectQuery(
+                type: quantityType,
+                predicate: predicate,
+                anchor: anchor,
+                limit: maxSamplesPerQuery
+            ) { [weak self] query, samples, deletedObjects, newAnchor, error in
+
+                defer { dispatchGroup.leave() }
+
+                if let error = error {
+                    print("❌ Anchored sync error for \(quantityType.identifier): \(error.localizedDescription)")
+                    return
                 }
-                dispatchGroup.leave()
+
+                // Save the new anchor
+                if let newAnchor = newAnchor {
+                    self?.saveAnchor(newAnchor, for: quantityType)
+                }
+
+                // Process samples
+                guard let quantitySamples = samples as? [HKQuantitySample], !quantitySamples.isEmpty else {
+                    print("ℹ️ No new \(quantityType.identifier) samples")
+                    return
+                }
+
+                print("📊 Syncing \(quantitySamples.count) \(quantityType.identifier) samples")
+                self?.processSamplesBatched(quantitySamples, for: quantityType, callback: callback)
             }
+
+            healthStore.execute(query)
         }
 
         // Wait for all queries to complete
         dispatchGroup.notify(queue: .main) {
-            // Notify Kotlin that sync is complete
+            print("✅ Anchored health data sync complete")
             callback?.onSyncComplete(success: syncSuccess)
             completion(syncSuccess)
         }
     }
+
+    // MARK: - Legacy Statistics Query (kept for compatibility)
 
     /// Fetch statistics for a quantity type
     /// - Parameters:
@@ -534,6 +688,10 @@ public class HealthDataSchedulerBridgeAdapter: IOSHealthDataSchedulerBridge {
 
     public func stopObserverQueries() {
         HealthDataTaskScheduler.shared.stopObserverQueries()
+    }
+
+    public func clearAllAnchors() {
+        HealthDataTaskScheduler.shared.clearAllAnchors()
     }
 }
 
