@@ -50,7 +50,7 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
             types.append(stepType)
         }
-        // Total Calories Burned (active + basal = total)
+        // Active Calories Burned
         if let calorieType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
             types.append(calorieType)
         }
