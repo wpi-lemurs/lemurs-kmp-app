@@ -246,7 +246,7 @@ interface IOSHealthDataCallback {
 
     /**
      * Called when speed data is collected from HealthKit.
-     * @param speedMetersSecond The distance walked in meters/second
+     * @param speedMetersSecond The speed in meters/second
      * @param startTimeMillis Start of the measurement period (Unix epoch ms)
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
      */
