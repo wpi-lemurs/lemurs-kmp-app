@@ -11,7 +11,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		42613FBCBF7447B723495CF8 /* Lemurs_App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lemurs_App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		42613FBCBF7447B723495CF8 /* Lemurs.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lemurs.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		94B316211E3A408DCBBA56F8 /* Pods-iosApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.debug.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.debug.xcconfig"; sourceTree = "<group>"; };
 		A777C2FF37AB4327BF60544C /* Pods_iosApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iosApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		DB6EAB3572162AF58FD725D9 /* Pods-iosApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.release.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.release.xcconfig"; sourceTree = "<group>"; };
@@ -39,8 +39,6 @@
 		};
 		798319A8879A21C53D5895B4 /* Configuration */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = Configuration;
 			sourceTree = "<group>";
 		};
@@ -89,7 +87,7 @@
 		FEE8C2975FA10D31F795C019 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				42613FBCBF7447B723495CF8 /* Lemurs_App.app */,
+				42613FBCBF7447B723495CF8 /* Lemurs.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -117,7 +115,7 @@
 			);
 			name = iosApp;
 			productName = iosApp;
-			productReference = 42613FBCBF7447B723495CF8 /* Lemurs_App.app */;
+			productReference = 42613FBCBF7447B723495CF8 /* Lemurs.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -192,9 +190,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-iosApp/Pods-iosApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-iosApp/Pods-iosApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -251,7 +253,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "LEMURS needs access to your health data to track your fitness progress and provide personalized insights.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app needs access to your health data to track your activity, including steps, calories burned, distance, and walking speed. This data will be collected even when the app is in the background to provide you with accurate health insights.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LEMURS needs to write health data to track your activities.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -349,7 +351,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "LEMURS needs access to your health data to track your fitness progress and provide personalized insights.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app needs access to your health data to track your activity, including steps, calories burned, distance, and walking speed. This data will be collected even when the app is in the background to provide you with accurate health insights.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LEMURS needs to write health data to track your activities.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -360,7 +362,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.LemursApp";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
