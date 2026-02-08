@@ -20,6 +20,9 @@ import ComposeApp
         if let activeEnergy = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
             types.insert(activeEnergy)
         }
+        if let basalEnergy = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) {
+            types.insert(basalEnergy)
+        }
         if let distance = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
             types.insert(distance)
         }
