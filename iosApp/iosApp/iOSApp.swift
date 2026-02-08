@@ -46,6 +46,9 @@ struct iOSApp: App {
         if let activeEnergy = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
             typesToRead.insert(activeEnergy)
         }
+        if let basalEnergy = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) {
+            typesToRead.insert(basalEnergy)
+        }
         if let distance = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
             typesToRead.insert(distance)
         }
