@@ -51,8 +51,12 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
             types.append(stepType)
         }
         // Active Calories Burned
-        if let calorieType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
-            types.append(calorieType)
+        if let activeCalorieType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
+            types.append(activeCalorieType)
+        }
+        // Basal (Resting) Calories Burned
+        if let basalCalorieType = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) {
+            types.append(basalCalorieType)
         }
         // Distance (meters)
         if let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
@@ -65,6 +69,21 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
 
         return types
     }
+
+    /// Pending calorie data for combining active + basal before sending
+    private struct PendingCalorieData {
+        var activeCalories: Double = 0
+        var basalCalories: Double = 0
+        var minStartDate: Date?
+        var maxEndDate: Date?
+        var sampleCount: Int = 0
+    }
+
+    /// Lock for thread-safe access to pending calorie data
+    private let calorieDataLock = NSLock()
+
+    /// Pending calorie accumulator
+    private var pendingCalorieData = PendingCalorieData()
 
     private override init() {
         if HKHealthStore.isHealthDataAvailable() {
@@ -268,6 +287,13 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
             // Process samples in batches to avoid memory pressure
             self?.processSamplesBatched(quantitySamples, for: quantityType, callback: callback)
 
+            // For calorie types, send accumulated data immediately after processing
+            // (since observer queries run independently per data type)
+            if quantityType.identifier == HKQuantityTypeIdentifier.activeEnergyBurned.rawValue ||
+               quantityType.identifier == HKQuantityTypeIdentifier.basalEnergyBurned.rawValue {
+                self?.sendAccumulatedCaloriesIfNeeded(callback: callback)
+            }
+
             completion()
         }
 
@@ -291,6 +317,8 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
             case HKQuantityTypeIdentifier.stepCount.rawValue:
                 totalValue += sample.quantity.doubleValue(for: HKUnit.count())
             case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
+                totalValue += sample.quantity.doubleValue(for: HKUnit.kilocalorie())
+            case HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
                 totalValue += sample.quantity.doubleValue(for: HKUnit.kilocalorie())
             case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
                 totalValue += sample.quantity.doubleValue(for: HKUnit.meter())
@@ -318,8 +346,12 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
             callback?.onStepsCollected(steps: Int64(totalValue), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
         case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
-            print("  📊 Total Calories: \(Int(totalValue)) kcal | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
-            callback?.onCaloriesCollected(calories: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            // Accumulate active calories - will be combined with basal
+            accumulateCalorieData(active: totalValue, basal: 0, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, callback: callback)
+
+        case HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
+            // Accumulate basal calories - will be combined with active
+            accumulateCalorieData(active: 0, basal: totalValue, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, callback: callback)
 
         case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
             print("  📊 Total Distance: \(Int(totalValue)) m | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
@@ -332,6 +364,63 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         default:
             break
         }
+    }
+
+    /// Accumulate calorie data from both active and basal sources
+    /// When both types are received, sends the combined total to the callback
+    private func accumulateCalorieData(active: Double, basal: Double, startDate: Date, endDate: Date, sampleCount: Int, callback: IOSHealthDataCallback?) {
+        calorieDataLock.lock()
+        defer { calorieDataLock.unlock() }
+
+        pendingCalorieData.activeCalories += active
+        pendingCalorieData.basalCalories += basal
+        pendingCalorieData.sampleCount += sampleCount
+
+        // Update time range
+        if let currentMin = pendingCalorieData.minStartDate {
+            pendingCalorieData.minStartDate = min(currentMin, startDate)
+        } else {
+            pendingCalorieData.minStartDate = startDate
+        }
+
+        if let currentMax = pendingCalorieData.maxEndDate {
+            pendingCalorieData.maxEndDate = max(currentMax, endDate)
+        } else {
+            pendingCalorieData.maxEndDate = endDate
+        }
+
+        // Check if we have both types (non-zero values for both)
+        // Send immediately if we have any calorie data accumulated
+        // The sync will wait for both types to complete before calling this
+    }
+
+    /// Send accumulated calorie data and reset
+    /// Called after all health data types have been processed in a sync batch
+    private func sendAccumulatedCaloriesIfNeeded(callback: IOSHealthDataCallback?) {
+        calorieDataLock.lock()
+
+        let totalCalories = pendingCalorieData.activeCalories + pendingCalorieData.basalCalories
+        let activeCalories = pendingCalorieData.activeCalories
+        let basalCalories = pendingCalorieData.basalCalories
+        let minStart = pendingCalorieData.minStartDate
+        let maxEnd = pendingCalorieData.maxEndDate
+        let sampleCount = pendingCalorieData.sampleCount
+
+        // Reset the accumulator
+        pendingCalorieData = PendingCalorieData()
+
+        calorieDataLock.unlock()
+
+        // Only send if we have calorie data
+        guard totalCalories > 0, let startDate = minStart, let endDate = maxEnd else {
+            return
+        }
+
+        let startTimeMillis = Int64(startDate.timeIntervalSince1970 * 1000)
+        let endTimeMillis = Int64(endDate.timeIntervalSince1970 * 1000)
+
+        print("  📊 Total Calories: \(Int(totalCalories)) kcal (Active: \(Int(activeCalories)) + Basal: \(Int(basalCalories))) | \(formatDate(startDate)) → \(formatDate(endDate)) (\(sampleCount) samples)")
+        callback?.onCaloriesCollected(calories: totalCalories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
     }
 
     /// Process individual samples and send to Kotlin callback (kept for granular mode if needed)
@@ -352,7 +441,12 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
 
             case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
                 let calories = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
-                if shouldLog { print("  📍 Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                if shouldLog { print("  📍 Active Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
+                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+
+            case HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
+                let calories = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
+                if shouldLog { print("  📍 Basal Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
                 callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
 
             case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
@@ -596,7 +690,10 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         }
 
         // Wait for all queries to complete
-        dispatchGroup.notify(queue: .main) {
+        dispatchGroup.notify(queue: .main) { [weak self] in
+            // Send any accumulated calorie data (combines active + basal)
+            self?.sendAccumulatedCaloriesIfNeeded(callback: callback)
+
             print("✅ Anchored health data sync complete")
             callback?.onSyncComplete(success: syncSuccess)
             completion(syncSuccess)
