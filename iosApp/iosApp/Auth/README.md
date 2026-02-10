@@ -120,25 +120,25 @@ The `Info.plist` should already contain the necessary URL scheme configuration:
 
 ### Swift Files (iosApp/iosApp/Auth/)
 
-| File | Purpose |
-|------|---------|
-| `MSALAuthHelper.swift` | Core MSAL wrapper - handles initialization, token acquisition, sign-out |
-| `MSALKotlinBridge.swift` | Bridge between Swift and Kotlin - exposes MSAL functionality to Kotlin |
+| File                       | Purpose                                                                 |
+|----------------------------|-------------------------------------------------------------------------|
+| `MSALAuthHelper.swift`     | Core MSAL wrapper - handles initialization, token acquisition, sign-out |
+| `MSALKotlinBridge.swift`   | Bridge between Swift and Kotlin - exposes MSAL functionality to Kotlin  |
 
 ### Kotlin Files (composeApp/src/iosMain/)
 
-| File | Purpose |
-|------|---------|
-| `IOSMSALBridge.kt` | Interface definition and provider singleton |
-| `MicrosoftApiAuthorizationService.ios.kt` | Actual implementation that uses the bridge |
+| File                                      | Purpose                                     |
+|-------------------------------------------|---------------------------------------------|
+| `IOSMSALBridge.kt`                        | Interface definition and provider singleton |
+| `MicrosoftApiAuthorizationService.ios.kt` | Actual implementation that uses the bridge  |
 
 ### Configuration Files
 
-| File | Purpose |
-|------|---------|
-| `auth_config_claim_auth_ios.json` | MSAL configuration (client ID, redirect URI, authority) |
-| `Info.plist` | iOS app configuration with URL schemes |
-| `Podfile` | CocoaPods dependency declaration |
+| File                               | Purpose                                                 |
+|------------------------------------|---------------------------------------------------------|
+| `auth_ config_claim_auth_ios.json` | MSAL configuration (client ID, redirect URI, authority) |
+| `Info.plist`                       | iOS app configuration with URL schemes                  |
+| `Podfile`                          | CocoaPods dependency declaration                        |
 
 ## Troubleshooting
 
