@@ -88,13 +88,14 @@ The HealthKit framework should be automatically linked when you add the capabili
 
 ## Data Types Supported
 
-| Data Type | HealthKit Identifier | Description |
-|-----------|---------------------|-------------|
-| Steps | `.stepCount` | Daily step count |
-| Active Calories | `.activeEnergyBurned` | Calories burned through activity |
-| Distance | `.distanceWalkingRunning` | Walking/running distance in meters |
-| Heart Rate | `.heartRate` | Heart rate measurements (BPM) |
-| Sleep | `.sleepAnalysis` | Sleep duration and stages |
+| Data Type        | HealthKit Identifier      | Description                        |
+|------------------|---------------------------|------------------------------------|
+| Steps            | `.stepCount`              | Daily step count                   |
+| Active Calories  | `.activeEnergyBurned`     | Calories burned through activity   |   
+| Basal Calories   | `.basalEnergyBurned`      | Calories burned without activity   | 
+| Distance         | `.distanceWalkingRunning` | Walking/running distance in meters |
+| Heart Rate       | `.heartRate`              | Heart rate measurements (BPM)      |
+| Sleep            | `.sleepAnalysis`          | Sleep duration and stages          |
 
 ## Usage from Kotlin
 
@@ -137,13 +138,13 @@ IOSHealthKitBridgeProvider.bridge?.getStepCount(
 
 ## Differences from Android Health Connect
 
-| Feature | iOS HealthKit | Android Health Connect |
-|---------|---------------|----------------------|
-| API Style | Query-based | Read records |
-| Permissions | Per-type, but status is hidden | Per-type, visible status |
-| Background Delivery | Observer queries | Changes tokens |
-| Data Sync | Automatic via iCloud | Per-app storage |
-| Simulator Support | Limited | Emulator support varies |
+| Feature             | iOS HealthKit                  | Android Health Connect   |
+|---------------------|--------------------------------|--------------------------|
+| API Style           | Query-based                    | Read records             |
+| Permissions         | Per-type, but status is hidden | Per-type, visible status |
+| Background Delivery | Observer queries               | Changes tokens           |
+| Data Sync           | Automatic via iCloud           | Per-app storage          |
+| Simulator Support   | Limited                        | Emulator support varies  |
 
 ## Troubleshooting
 
