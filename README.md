@@ -1,3 +1,7 @@
+# LEMURS Mobile App
+
+> For detailed setup, architecture, and development instructions, see [INSTRUCTIONS.md](./INSTRUCTIONS.md)
+
 This is a Kotlin Multiplatform project targeting Android, iOS.
 
 * [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
