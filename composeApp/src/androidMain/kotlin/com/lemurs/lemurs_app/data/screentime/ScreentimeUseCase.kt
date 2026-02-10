@@ -70,10 +70,10 @@ class ScreentimeUseCase(
             // Only include apps that were actually used in the 15-minute window
             if (queryUsageStats[i].lastTimeUsed >= fifteenMinAgo && queryUsageStats[i].totalTimeVisible > 0) {
                 val stats = queryUsageStats.get(i)
-                val firstTimeStamp = stats.firstTimeStamp
-                val firstTimeStampDate = Instant.fromEpochMilliseconds(firstTimeStamp).toString()
-                val lastTimeStamp = stats.lastTimeStamp
-                val lastTimeStampDate = Instant.fromEpochMilliseconds(lastTimeStamp).toString()
+//                val firstTimeStamp = stats.firstTimeStamp
+//                val firstTimeStampDate = Instant.fromEpochMilliseconds(firstTimeStamp).toString()
+//                val lastTimeStamp = stats.lastTimeStamp
+//                val lastTimeStampDate = Instant.fromEpochMilliseconds(lastTimeStamp).toString()
                 val appName = stats.packageName
                 val lastTimeUsed = stats.lastTimeUsed
                 val lastTimeUsedDate = Instant.fromEpochMilliseconds(lastTimeUsed).toString()
@@ -82,8 +82,8 @@ class ScreentimeUseCase(
                 val screentimeData = Screentime(
                     //0,
                     System.currentTimeMillis().toString(),
-                    firstTimeStampDate,
-                    lastTimeStampDate,
+                    Instant.fromEpochMilliseconds(fifteenMinAgo).toString(),
+                    Instant.fromEpochMilliseconds(now).toString(),
                     appName,
                     totalTime,
                     lastTimeUsedDate
