@@ -25,7 +25,7 @@ struct iOSApp: App {
 
         // Schedule background health data sync
         HealthDataTaskScheduler.shared.scheduleBackgroundHealthSync()
-ifi
+
         // Request notification permissions and schedule daily survey notifications
         ComposeApp.NotificationUtil().requestNotificationPermission()
         ComposeApp.NotificationUtil().scheduleDailySurveyNotifications()
