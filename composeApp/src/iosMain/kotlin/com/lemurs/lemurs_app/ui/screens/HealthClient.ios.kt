@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.health.IOSHealthKitBridgeProvider
+import com.lemurs.lemurs_app.health.HealthDataScheduler
 import kotlinx.coroutines.launch
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -302,6 +303,7 @@ private suspend fun requestHealthKitPermissions(): Boolean = suspendCoroutine { 
 /**
  * Initialize HealthKit data collection and background delivery.
  * Uses the Swift bridge to enable background delivery for health data types.
+ * Also enables passive background collection via observer queries.
  */
 private suspend fun initializeHealthKitDataCollection(): Unit = suspendCoroutine { continuation ->
     val bridge = IOSHealthKitBridgeProvider.bridge
@@ -312,10 +314,15 @@ private suspend fun initializeHealthKitDataCollection(): Unit = suspendCoroutine
 
     bridge.enableBackgroundDelivery(
         onSuccess = {
+            // Also enable passive collection (observer queries) via the HealthDataScheduler
+            // This sets up HKObserverQuery for steps, calories, distance, and speed
+            HealthDataScheduler().enablePassiveCollection()
             continuation.resume(Unit)
         },
         onError = { _ ->
             // Log error but don't fail - background delivery is optional
+            // Still try to enable passive collection
+            HealthDataScheduler().enablePassiveCollection()
             continuation.resume(Unit)
         }
     )
