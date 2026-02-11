@@ -46,6 +46,9 @@ struct iOSApp: App {
         if let activeEnergy = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
             typesToRead.insert(activeEnergy)
         }
+        if let basalEnergy = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) {
+            typesToRead.insert(basalEnergy)
+        }
         if let distance = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
             typesToRead.insert(distance)
         }
@@ -55,6 +58,10 @@ struct iOSApp: App {
         if let sleep = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) {
             typesToRead.insert(sleep)
         }
+        // Add walking speed for passive background collection
+        if let walkingSpeed = HKQuantityType.quantityType(forIdentifier: .walkingSpeed) {
+            typesToRead.insert(walkingSpeed)
+        }
 
         // Request authorization - this will show the permissions dialog
         healthStore.requestAuthorization(toShare: nil, read: typesToRead) { success, error in
@@ -63,6 +70,12 @@ struct iOSApp: App {
                     print("❌ HealthKit authorization error: \(error.localizedDescription)")
                 } else if success {
                     print("✅ HealthKit authorization dialog was presented")
+                    // Mark that authorization was requested (for read-only, we can't check if granted)
+                    HealthDataTaskScheduler.shared.markAuthorizationRequested()
+                    // After authorization, enable background delivery and set up observer queries
+                    HealthDataTaskScheduler.shared.enableBackgroundDelivery()
+                    HealthDataTaskScheduler.shared.setupObserverQueries()
+                    print("✅ Background delivery and observer queries enabled after authorization")
                 } else {
                     print("⚠️ HealthKit authorization was not successful")
                 }

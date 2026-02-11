@@ -3,6 +3,7 @@ package com.lemurs.lemurs_app.health
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.dtos.CaloriesDataDto
 import com.lemurs.lemurs_app.data.dtos.DistanceDataDto
+import com.lemurs.lemurs_app.data.dtos.SpeedDataDto
 import com.lemurs.lemurs_app.data.dtos.StepsDataDto
 import com.lemurs.lemurs_app.data.health.IOSHealthKitBridgeProvider
 import com.lemurs.lemurs_app.data.repositories.AppRepository
@@ -66,6 +67,65 @@ actual class HealthDataScheduler {
     }
 
     /**
+     * Enable passive background health data collection.
+     * This sets up observer queries that will be triggered when new health data
+     * is written to HealthKit, even when the app is in the background or phone is locked.
+     *
+     * Data types collected:
+     * - Steps (count)
+     * - Calories burned (Cal)
+     * - Distance (meters)
+     * - Speed (meters/second)
+     */
+    fun enablePassiveCollection() {
+        logger.i("Enabling passive background health data collection")
+
+        val bridge = IOSHealthDataSchedulerProvider.bridge
+        if (bridge == null) {
+            logger.w("Health data scheduler bridge not available")
+            return
+        }
+
+        bridge.enableBackgroundDelivery()
+        bridge.setupObserverQueries()
+        logger.i("Passive background collection enabled")
+    }
+
+    /**
+     * Disable passive background health data collection.
+     */
+    fun disablePassiveCollection() {
+        logger.i("Disabling passive background health data collection")
+
+        val bridge = IOSHealthDataSchedulerProvider.bridge
+        if (bridge == null) {
+            logger.w("Health data scheduler bridge not available")
+            return
+        }
+
+        bridge.stopObserverQueries()
+        logger.i("Passive background collection disabled")
+    }
+
+    /**
+     * Reset sync state by clearing all stored anchors.
+     * This will cause the next sync to fetch all historical data.
+     * Useful for debugging or if sync state becomes corrupted.
+     */
+    fun resetSyncState() {
+        logger.i("Resetting health data sync state (clearing all anchors)")
+
+        val bridge = IOSHealthDataSchedulerProvider.bridge
+        if (bridge == null) {
+            logger.w("Health data scheduler bridge not available")
+            return
+        }
+
+        bridge.clearAllAnchors()
+        logger.i("Sync state reset - next sync will fetch all historical data")
+    }
+
+    /**
      * Fallback: perform immediate sync directly via HealthKit bridge
      */
     private fun performImmediateSync() {
@@ -100,6 +160,11 @@ actual class HealthDataScheduler {
 /**
  * Interface for iOS health data scheduler bridge.
  * Implemented in Swift (HealthDataTaskScheduler.swift).
+ *
+ * Uses HKAnchoredObjectQuery for incremental, granular data collection:
+ * - No duplicates (anchor tracks what's been processed)
+ * - No missing samples
+ * - Exact sample-level granularity
  */
 interface IOSHealthDataSchedulerBridge {
     /**
@@ -116,6 +181,30 @@ interface IOSHealthDataSchedulerBridge {
      * Cancel all scheduled background health tasks
      */
     fun cancelScheduledTasks()
+
+    /**
+     * Enable background delivery for health data types.
+     * This allows iOS to wake up the app when new health data is available.
+     */
+    fun enableBackgroundDelivery()
+
+    /**
+     * Set up observer queries for passive data collection.
+     * These queries will trigger when new health data is written to HealthKit,
+     * even when the app is in the background or phone is locked.
+     */
+    fun setupObserverQueries()
+
+    /**
+     * Stop all observer queries.
+     */
+    fun stopObserverQueries()
+
+    /**
+     * Clear all stored anchors (useful for resetting sync state).
+     * This will cause the next sync to fetch all historical data.
+     */
+    fun clearAllAnchors()
 }
 
 /**
@@ -154,6 +243,14 @@ interface IOSHealthDataCallback {
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
      */
     fun onDistanceCollected(distanceMeters: Double, startTimeMillis: Long, endTimeMillis: Long)
+
+    /**
+     * Called when speed data is collected from HealthKit.
+     * @param speedMetersSecond The speed in meters/second
+     * @param startTimeMillis Start of the measurement period (Unix epoch ms)
+     * @param endTimeMillis End of the measurement period (Unix epoch ms)
+     */
+    fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long)
 
     /**
      * Called when all health data sync is complete
@@ -195,9 +292,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val stepsDto = StepsDataDto(
                     userId = "",
@@ -225,9 +322,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val caloriesDto = CaloriesDataDto(
                     userId = "",
@@ -255,9 +352,9 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         scope.launch {
             try {
                 val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
                 val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
-                    .toLocalDateTime(TimeZone.UTC)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
 
                 val distanceDto = DistanceDataDto(
                     userId = "",
@@ -275,6 +372,36 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
                 }
             } catch (e: Exception) {
                 logger.e("❌ Error sending distance data: ${e.message}")
+            }
+        }
+    }
+
+    override fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long) {
+        logger.i("📊 Received speed from HealthKit: $speedMetersSecond meters/second(sending to API...)")
+
+        scope.launch {
+            try {
+                val startDateTime = Instant.fromEpochMilliseconds(startTimeMillis)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
+                val endDateTime = Instant.fromEpochMilliseconds(endTimeMillis)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
+
+                val speedDto = SpeedDataDto(
+                    userId = "",
+                    speed = listOf(speedMetersSecond),
+                    start_timestamp = startDateTime,
+                    end_timestamp = endDateTime,
+                    appSource = "HealthKit"
+                )
+
+                val success = appRepository.sendSpeedData(speedDto)
+                if (success) {
+                    logger.i("✅ Speed data sent to API successfully")
+                } else {
+                    logger.e("❌ Failed to send speed data to API")
+                }
+            } catch (e: Exception) {
+                logger.e("❌ Error sending speed data: ${e.message}")
             }
         }
     }
