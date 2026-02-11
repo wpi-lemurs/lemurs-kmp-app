@@ -70,6 +70,7 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
             val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
             if (nextWeeklySurvey != null) {
                 scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
+                logger.w { "Scheduled weekly survey notification for $nextWeeklySurvey" }
             }
         }
     }
