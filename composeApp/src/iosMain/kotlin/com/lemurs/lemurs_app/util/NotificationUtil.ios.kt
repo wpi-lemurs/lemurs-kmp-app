@@ -61,7 +61,13 @@ actual class NotificationUtil {
             content = morningContent,
             trigger = morningTrigger
         )
-        center.addNotificationRequest(morningRequest, null)
+        center.addNotificationRequest(morningRequest) { error ->
+            if (error != null) {
+                println("❌ Failed to schedule morning notification: ${error.localizedDescription}")
+            } else {
+                println("✅ Scheduled morning survey notification for 08:00")
+            }
+        }
         // Afternoon
         val afternoonContent = UNMutableNotificationContent()
         afternoonContent.setTitle("Afternoon Survey")
@@ -79,7 +85,13 @@ actual class NotificationUtil {
             content = afternoonContent,
             trigger = afternoonTrigger
         )
-        center.addNotificationRequest(afternoonRequest, null)
+        center.addNotificationRequest(afternoonRequest) { error ->
+            if (error != null) {
+                println("❌ Failed to schedule afternoon notification: ${error.localizedDescription}")
+            } else {
+                println("✅ Scheduled afternoon survey notification for 15:00")
+            }
+        }
     }
 
     fun scheduleWeeklySurveyNotification(nextWeeklySurvey: String) {
@@ -106,6 +118,12 @@ actual class NotificationUtil {
             content = weeklyContent,
             trigger = weeklyTrigger
         )
-        center.addNotificationRequest(weeklyRequest, null)
+        center.addNotificationRequest(weeklyRequest) { error ->
+            if (error != null) {
+                println("❌ Failed to schedule weekly notification: ${error.localizedDescription}")
+            } else {
+                println("✅ Scheduled weekly survey notification for $nextWeeklySurvey")
+            }
+        }
     }
 }
