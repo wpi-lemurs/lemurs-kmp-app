@@ -5,6 +5,7 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.lemurs.lemurs_app.healthSync</string>
+		<string>com.lemurs.lemurs_app.screentimeCollection</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -28,6 +29,8 @@
 		<string>fetch</string>
 		<string>processing</string>
 	</array>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>We need Screen Time access to collect app usage data for research purposes.</string>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>

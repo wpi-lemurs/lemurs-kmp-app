@@ -17,14 +17,23 @@ struct iOSApp: App {
         // This also registers background tasks with BGTaskScheduler
         registerHealthDataSchedulerWithKotlin()
 
+        // Register the Screen Time Scheduler bridge with Kotlin
+        registerScreenTimeSchedulerWithKotlin()
+
         // Initialize Koin for dependency injection
         MainViewControllerKt.doInitKoin()
 
         // Request HealthKit permissions on app start
         requestHealthKitPermissionsOnStart()
 
+        // Request Screen Time permissions on app start
+        requestScreenTimePermissionsOnStart()
+
         // Schedule background health data sync
         HealthDataTaskScheduler.shared.scheduleBackgroundHealthSync()
+
+        // Schedule background screen time collection
+        ScreenTimeTaskScheduler.shared.scheduleBackgroundScreentimeCollection()
     }
 
     /// Request HealthKit permissions when the app starts
@@ -79,6 +88,29 @@ struct iOSApp: App {
                 } else {
                     print("⚠️ HealthKit authorization was not successful")
                 }
+            }
+        }
+    }
+
+    /// Request Screen Time permissions when the app starts (iOS 15+)
+    private func requestScreenTimePermissionsOnStart() {
+        // Check if running on simulator
+        #if targetEnvironment(simulator)
+        print("⚠️ Screen Time API not supported on Simulator - skipping authorization")
+        print("ℹ️  Screen Time requires a physical device for testing")
+        return
+        #endif
+
+        guard #available(iOS 15.0, *) else {
+            print("⚠️ Screen Time API requires iOS 15.0+")
+            return
+        }
+
+        ScreenTimeTaskScheduler.shared.requestAuthorization { granted in
+            if granted {
+                print("✅ Screen Time authorization granted")
+            } else {
+                print("⚠️ Screen Time authorization denied or cancelled")
             }
         }
     }
