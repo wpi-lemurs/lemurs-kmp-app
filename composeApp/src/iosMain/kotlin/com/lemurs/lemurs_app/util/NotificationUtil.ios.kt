@@ -1,24 +1,111 @@
 package com.lemurs.lemurs_app.util
 
 import com.lemurs.lemurs_app.data.local.UseCaseResult
-
+import platform.Foundation.*
+import platform.UserNotifications.*
 
 actual class NotificationUtil {
-    actual fun checkSurveyCompleted(): Boolean{
+    actual fun checkSurveyCompleted(): Boolean {
         return true
     }
+
     actual fun sendNotificationText(
         title: String,
         body: String
     ): UseCaseResult<Any> {
-        // iOS implementation - TODO
+        val content = UNMutableNotificationContent().also {
+            it.setTitle(title)
+            it.setBody(body)
+            it.setSound(UNNotificationSound.defaultSound())
+        }
+        val trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(1.0, false)
+        val request = UNNotificationRequest.requestWithIdentifier(
+            identifier = NSUUID().UUIDString,
+            content = content,
+            trigger = trigger
+        )
+        UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(request, null)
         return UseCaseResult.Success(Unit)
     }
+
     actual fun sendNotificationWithoutCheck(
         title: String,
         body: String
     ): UseCaseResult<Any> {
-        // iOS implementation - TODO
-        return UseCaseResult.Success(Unit)
+        return sendNotificationText(title, body)
+    }
+
+    fun requestNotificationPermission() {
+        UNUserNotificationCenter.currentNotificationCenter().requestAuthorizationWithOptions(
+            options = UNAuthorizationOptionAlert or UNAuthorizationOptionSound or UNAuthorizationOptionBadge,
+            completionHandler = { _, _ -> }
+        )
+    }
+
+    fun scheduleDailySurveyNotifications() {
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        // Morning
+        val morningContent = UNMutableNotificationContent()
+        morningContent.setTitle("Morning Survey")
+        morningContent.setBody("The morning survey is now open! Please open the app to complete it.")
+        morningContent.setSound(UNNotificationSound.defaultSound())
+        val morningDate = NSDateComponents().apply {
+            hour = 8
+            minute = 0
+        }
+        val morningTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+            morningDate, true
+        )
+        val morningRequest = UNNotificationRequest.requestWithIdentifier(
+            identifier = "morningSurvey",
+            content = morningContent,
+            trigger = morningTrigger
+        )
+        center.addNotificationRequest(morningRequest, null)
+        // Afternoon
+        val afternoonContent = UNMutableNotificationContent()
+        afternoonContent.setTitle("Afternoon Survey")
+        afternoonContent.setBody("The afternoon survey is now open! Please open the app to complete it.")
+        afternoonContent.setSound(UNNotificationSound.defaultSound())
+        val afternoonDate = NSDateComponents().apply {
+            hour = 15
+            minute = 0
+        }
+        val afternoonTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+            afternoonDate, true
+        )
+        val afternoonRequest = UNNotificationRequest.requestWithIdentifier(
+            identifier = "afternoonSurvey",
+            content = afternoonContent,
+            trigger = afternoonTrigger
+        )
+        center.addNotificationRequest(afternoonRequest, null)
+    }
+
+    fun scheduleWeeklySurveyNotification(nextWeeklySurvey: String) {
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        val weeklyContent = UNMutableNotificationContent()
+        weeklyContent.setTitle("Weekly Survey")
+        weeklyContent.setBody("The weekly survey is now open! Please open the app to complete it.")
+        weeklyContent.setSound(UNNotificationSound.defaultSound())
+        val formatter = NSDateFormatter().apply {
+            dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+            timeZone = NSTimeZone.systemTimeZone
+        }
+        val date = formatter.dateFromString(nextWeeklySurvey)
+        val calendar = NSCalendar.currentCalendar
+        val components = calendar.components(
+            NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or NSCalendarUnitHour or NSCalendarUnitMinute,
+            fromDate = date!!
+        )
+        val weeklyTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+            components, false
+        )
+        val weeklyRequest = UNNotificationRequest.requestWithIdentifier(
+            identifier = "weeklySurvey",
+            content = weeklyContent,
+            trigger = weeklyTrigger
+        )
+        center.addNotificationRequest(weeklyRequest, null)
     }
 }
