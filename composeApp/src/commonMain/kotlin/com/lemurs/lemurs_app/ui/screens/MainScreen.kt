@@ -40,8 +40,11 @@ import com.lemurs.lemurs_app.ui.theme.LemurWhite
 import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
 import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
-//import org.jetbrains.compose.ui.tooling.preview.Preview
+import com.lemurs.lemurs_app.getPlatform
 import org.koin.compose.viewmodel.koinViewModel
+
+// Platform-specific expect declaration for iOS notification scheduling
+expect fun scheduleWeeklySurveyNotificationIos(nextWeeklySurvey: String)
 
 @Composable
 fun MainScreen(onNavigateTo: (String) -> Unit) {
@@ -60,6 +63,17 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
 //        surveyAvailabilityViewModel.enableDebugMode()
     }
     val currentProgress = progressViewModel.newProgress.value
+
+    LaunchedEffect(currentProgress?.nextWeeklySurvey) {
+        // Only run on iOS
+        if (getPlatform().name.lowercase().contains("ios")) {
+            val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
+            if (nextWeeklySurvey != null) {
+                scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
+                logger.w { "Scheduled weekly survey notification for $nextWeeklySurvey" }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.padding(16.dp))
