@@ -25,6 +25,10 @@ struct iOSApp: App {
 
         // Schedule background health data sync
         HealthDataTaskScheduler.shared.scheduleBackgroundHealthSync()
+
+        // Request notification permissions and schedule daily survey notifications
+        ComposeApp.NotificationUtil().requestNotificationPermission()
+        ComposeApp.NotificationUtil().scheduleDailySurveyNotifications()
     }
 
     /// Request HealthKit permissions when the app starts
@@ -46,6 +50,9 @@ struct iOSApp: App {
         if let activeEnergy = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
             typesToRead.insert(activeEnergy)
         }
+        if let basalEnergy = HKQuantityType.quantityType(forIdentifier: .basalEnergyBurned) {
+            typesToRead.insert(basalEnergy)
+        }
         if let distance = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
             typesToRead.insert(distance)
         }
@@ -55,6 +62,10 @@ struct iOSApp: App {
         if let sleep = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) {
             typesToRead.insert(sleep)
         }
+        // Add walking speed for passive background collection
+        if let walkingSpeed = HKQuantityType.quantityType(forIdentifier: .walkingSpeed) {
+            typesToRead.insert(walkingSpeed)
+        }
 
         // Request authorization - this will show the permissions dialog
         healthStore.requestAuthorization(toShare: nil, read: typesToRead) { success, error in
@@ -63,6 +74,10 @@ struct iOSApp: App {
                     print("❌ HealthKit authorization error: \(error.localizedDescription)")
                 } else if success {
                     print("✅ HealthKit authorization dialog was presented")
+                    // Mark that authorization was requested (for read-only, we can't check if granted)
+                    HealthDataTaskScheduler.shared.markAuthorizationRequested()
+                    // Configure all background sync (enables background delivery + observer queries)
+                    HealthDataTaskScheduler.shared.configureHealthKitBackgroundSync()
                 } else {
                     print("⚠️ HealthKit authorization was not successful")
                 }

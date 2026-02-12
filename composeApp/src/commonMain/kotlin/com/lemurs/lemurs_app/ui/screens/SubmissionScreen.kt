@@ -29,18 +29,20 @@ import com.lemurs.lemurs_app.ui.theme.LemurButtonGrey
 import com.lemurs.lemurs_app.ui.theme.LemurDarkGrey
 import com.lemurs.lemurs_app.ui.theme.LemurDarkerGrey
 import com.lemurs.lemurs_app.ui.theme.LemurWhite
+import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SubmissionViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WeeklyQuestionsViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WeeklySurveyViewModel
 import lemurs_app.composeapp.generated.resources.Res
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 
 @Composable
 fun SubmissionScreen(
     onNavigateTo: (String) -> Unit,
     submissionViewModel: SubmissionViewModel = koinInject(),
-    weeklyQuestionsViewModel: WeeklyQuestionsViewModel = koinInject()
+    weeklyQuestionsViewModel: WeeklyQuestionsViewModel = koinInject(),
 ) {
     val surveyItems by submissionViewModel.surveyItems.collectAsState()
 
@@ -103,4 +105,3 @@ fun SubmissionScreen(
         //Spacer(modifier = Modifier.height(50.dp))
     }
 }
-
