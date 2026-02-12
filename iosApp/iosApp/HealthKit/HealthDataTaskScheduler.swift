@@ -1,6 +1,7 @@
 import Foundation
 import BackgroundTasks
 import HealthKit
+import UIKit
 import ComposeApp
 
 /// Background task identifier for health data sync
@@ -195,7 +196,14 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
                     return
                 }
 
-                print("📊 Observer triggered for \(quantityType.identifier) - new data available")
+                // Check if phone is unlocked - data is encrypted when locked
+                guard UIApplication.shared.isProtectedDataAvailable else {
+                    print("⚠️ Observer triggered for \(quantityType.identifier) but phone is locked. Data is encrypted, will sync later.")
+                    completionHandler()
+                    return
+                }
+
+                print("📊 Observer triggered for \(quantityType.identifier) - new data available, syncing...")
 
                 // Fetch and send the new data
                 self?.fetchAndSendData(for: quantityType) {
@@ -751,6 +759,18 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         }
 
         healthStore.execute(query)
+    }
+
+    // MARK: - Convenience Wrapper for HealthKit Background Sync
+
+    /// Convenience function to configure all HealthKit background sync at once.
+    /// This enables background delivery and sets up observer queries for all health data types.
+    /// Call this after HealthKit authorization has been granted.
+    @objc public func configureHealthKitBackgroundSync() {
+        print("🔄 Configuring HealthKit background sync for all data types...")
+        enableBackgroundDelivery()
+        setupObserverQueries()
+        print("✅ HealthKit background sync fully configured")
     }
 }
 
