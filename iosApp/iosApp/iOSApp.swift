@@ -76,10 +76,8 @@ struct iOSApp: App {
                     print("✅ HealthKit authorization dialog was presented")
                     // Mark that authorization was requested (for read-only, we can't check if granted)
                     HealthDataTaskScheduler.shared.markAuthorizationRequested()
-                    // After authorization, enable background delivery and set up observer queries
-                    HealthDataTaskScheduler.shared.enableBackgroundDelivery()
-                    HealthDataTaskScheduler.shared.setupObserverQueries()
-                    print("✅ Background delivery and observer queries enabled after authorization")
+                    // Configure all background sync (enables background delivery + observer queries)
+                    HealthDataTaskScheduler.shared.configureHealthKitBackgroundSync()
                 } else {
                     print("⚠️ HealthKit authorization was not successful")
                 }
