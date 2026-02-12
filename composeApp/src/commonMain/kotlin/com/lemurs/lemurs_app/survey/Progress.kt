@@ -15,7 +15,8 @@ data class Progress(
     val dailySurveysTotalBonus: Double,
     val dailySurveysWeeklyCompleted: Int,
     val dailySurveysWeeklyGoal: Int,
-    val dailySurveysWeeklyBonus: Double
+    val dailySurveysWeeklyBonus: Double,
+    val nextWeeklySurvey: String? = null // ISO string for next weekly survey
 )
 
 
