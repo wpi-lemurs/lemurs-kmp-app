@@ -38,7 +38,7 @@ actual class SendDataScheduler{
     //
     actual fun scheduleScreentime() {
         val screentimeRequest =
-            PeriodicWorkRequestBuilder<SendScreentimeDataWorker>(2, TimeUnit.HOURS)
+            PeriodicWorkRequestBuilder<SendScreentimeDataWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(getConstraints())
                 .build()
         workManager.enqueueUniquePeriodicWork("send screentime schedule", ExistingPeriodicWorkPolicy.KEEP, screentimeRequest)
