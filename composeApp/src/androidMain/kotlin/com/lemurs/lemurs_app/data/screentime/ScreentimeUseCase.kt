@@ -3,6 +3,7 @@ package com.lemurs.lemurs_app.data.screentime
 import android.app.AppOpsManager
 import android.app.AppOpsManager.MODE_ALLOWED
 import android.app.AppOpsManager.OPSTR_GET_USAGE_STATS
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStats
 import android.os.Process
 import android.app.usage.UsageStatsManager
@@ -56,42 +57,66 @@ class ScreentimeUseCase(
 
     @RequiresApi(Build.VERSION_CODES.Q)
     fun getUsageStats(usageStatsManager: UsageStatsManager): List<Screentime> {
-        //        get a 15 minute interval
         val now = System.currentTimeMillis()
         val fifteenMinAgo = now - (15 * 60 * 1000)
-        val queryUsageStats: List<UsageStats> = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_BEST,
-            fifteenMinAgo,
-            now
-        )
-        logger.w("stats from "+Instant.fromEpochMilliseconds(now).toString()+" to " + Instant.fromEpochMilliseconds(fifteenMinAgo).toString())
+
+        logger.w("stats from " + Instant.fromEpochMilliseconds(now).toString() + " to " + Instant.fromEpochMilliseconds(fifteenMinAgo).toString())
+
+        val events = usageStatsManager.queryEvents(fifteenMinAgo, now)
+        val event = UsageEvents.Event()
+
+        val appStartTimes = mutableMapOf<String, Long>()
+        val appTotalDurations = mutableMapOf<String, Long>()
+        val lastEventTimes = mutableMapOf<String, Long>()
+
+        // Process raw events to get precise 15-minute delta
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val pkg = event.packageName ?: continue
+
+            when (event.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    appStartTimes[pkg] = event.timeStamp
+                }
+                UsageEvents.Event.ACTIVITY_PAUSED,
+                UsageEvents.Event.ACTIVITY_STOPPED -> {
+                    val startTime = appStartTimes.remove(pkg)
+                    if (startTime != null) {
+                        val duration = event.timeStamp - startTime
+                        appTotalDurations[pkg] = (appTotalDurations[pkg] ?: 0L) + duration
+                    }
+                }
+            }
+            lastEventTimes[pkg] = event.timeStamp
+        }
+
+        // Handle app currently being used
+        appStartTimes.forEach { (pkg, startTime) ->
+            val ongoingDuration = now - startTime
+            appTotalDurations[pkg] = (appTotalDurations[pkg] ?: 0L) + ongoingDuration
+        }
+
         val screentimeDataList: MutableList<Screentime> = mutableListOf()
-        for (i in queryUsageStats.indices) {
-            // Only include apps that were actually used in the 15-minute window
-            if (queryUsageStats[i].lastTimeUsed >= fifteenMinAgo && queryUsageStats[i].totalTimeVisible > 0) {
-                val stats = queryUsageStats.get(i)
-                val firstTimeStamp = stats.firstTimeStamp
-                val firstTimeStampDate = Instant.fromEpochMilliseconds(firstTimeStamp).toString()
-                val lastTimeStamp = stats.lastTimeStamp
-                val lastTimeStampDate = Instant.fromEpochMilliseconds(lastTimeStamp).toString()
-                val appName = stats.packageName
-                val lastTimeUsed = stats.lastTimeUsed
-                val lastTimeUsedDate = Instant.fromEpochMilliseconds(lastTimeUsed).toString()
-                val totalTime: Long = stats.totalTimeVisible
-                //TODO- make dates into date format
+
+        for ((pkgName, totalTime) in appTotalDurations) {
+            if (totalTime > 0) {
+                val lastUsed = lastEventTimes[pkgName] ?: 0L
+                val lastTimeUsedDate = Instant.fromEpochMilliseconds(lastUsed).toString()
+
                 val screentimeData = Screentime(
-                    //0,
                     System.currentTimeMillis().toString(),
-                    firstTimeStampDate,
-                    lastTimeStampDate,
-                    appName,
+                    Instant.fromEpochMilliseconds(fifteenMinAgo).toString(),
+                    Instant.fromEpochMilliseconds(now).toString(),
+                    pkgName,
                     totalTime,
                     lastTimeUsedDate
                 )
-                logger.w("package name: " +appName+" total time: "+totalTime+" last time used: "+lastTimeUsedDate)
+
+                logger.w("package name: $pkgName total time: $totalTime last time used: $lastTimeUsedDate")
                 screentimeDataList.add(screentimeData)
             }
         }
+
         return screentimeDataList
     }
 
