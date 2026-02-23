@@ -99,10 +99,10 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)
                 // Get provisionally a survey response ID
-                // Negative ID indicates a failed submission
+                // Negative ID indicates a pending submission (not yet submitted to server)
                 setCurrentSurveyResponseId(-1 * completedSurvey.id)
-                // Schedule background worker to retry
-                SendDataScheduler().scheduleSurveyResponse()
+                // NOTE: Don't schedule background worker here - submitAllWeeklyData() will handle
+                // the immediate submission, and only schedule a retry worker if that fails.
                 onSurveySuccess?.invoke(-1 * completedSurvey.id)
             }
         } catch (e: Exception) {
