@@ -12,6 +12,13 @@ class SubmissionViewModel : ViewModel() {
     private val _surveyType = MutableStateFlow<String>("")
     val surveyType: StateFlow<String> = _surveyType
 
+    // Items that should be shown for weekly survey submissions
+    private val weeklyAllowedItems = setOf(
+        "PHQ-9",
+        "Writing Prompt",
+        "Audio Prompt"
+    )
+
     fun setSurveyType(type: String) {
         _surveyType.value = type
     }
@@ -34,4 +41,17 @@ class SubmissionViewModel : ViewModel() {
         _surveyItems.value = emptyList()
     }
 
+    /**
+     * Returns filtered survey items based on survey type.
+     * For weekly surveys, only PHQ-9, Writing Prompt, and Audio Prompt are shown.
+     * For daily surveys, all items are shown.
+     */
+    fun getFilteredSurveyItems(): List<Pair<String, String>> {
+        val items = _surveyItems.value
+        return if (_surveyType.value == "weekly") {
+            items.filter { it.first in weeklyAllowedItems }
+        } else {
+            items
+        }
+    }
 }
