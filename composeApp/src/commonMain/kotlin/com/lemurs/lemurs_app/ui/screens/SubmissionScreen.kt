@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -45,6 +46,13 @@ fun SubmissionScreen(
     weeklyQuestionsViewModel: WeeklyQuestionsViewModel = koinInject(),
 ) {
     val surveyItems by submissionViewModel.surveyItems.collectAsState()
+    val surveyType by submissionViewModel.surveyType.collectAsState()
+
+    // Filter items based on survey type (weekly only shows PHQ-9, Writing Prompt, Audio Prompt)
+    // Use remember to recalculate when surveyItems or surveyType changes
+    val filteredItems = remember(surveyItems, surveyType) {
+        submissionViewModel.getFilteredSurveyItems()
+    }
 
     Box(
         modifier = Modifier
@@ -67,7 +75,7 @@ fun SubmissionScreen(
                 modifier = Modifier.padding(24.dp).fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(50.dp))
-            EarningsBreakdownCard(items = surveyItems)
+            EarningsBreakdownCard(items = filteredItems)
         }
         Box(
             modifier = Modifier
