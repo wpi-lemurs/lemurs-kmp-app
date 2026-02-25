@@ -4,6 +4,7 @@
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
+		<string>com.lemurs.bluetooth.scan</string>
 		<string>com.lemurs.lemurs_app.healthSync</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
@@ -27,6 +28,7 @@
 	<array>
 		<string>fetch</string>
 		<string>processing</string>
+		<string>bluetooth-central</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>

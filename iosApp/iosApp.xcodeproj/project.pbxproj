@@ -249,10 +249,11 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = SP9YZBNSMQ;
+				DEVELOPMENT_TEAM = Q4ZWN5WZRP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app scans nearby Bluetooth devices to collect anonymized proximity data for medical research.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app needs access to your health data to track your activity, including steps, calories burned, distance, and walking speed. This data will be collected even when the app is in the background to provide you with accurate health insights.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LEMURS needs to write health data to track your activities.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -264,7 +265,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.Santiago";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -347,10 +349,11 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = SP9YZBNSMQ;
+				DEVELOPMENT_TEAM = Q4ZWN5WZRP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app scans nearby Bluetooth devices to collect anonymized proximity data for medical research.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app needs access to your health data to track your activity, including steps, calories burned, distance, and walking speed. This data will be collected even when the app is in the background to provide you with accurate health insights.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "LEMURS needs to write health data to track your activities.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -362,7 +365,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.Santiago";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
