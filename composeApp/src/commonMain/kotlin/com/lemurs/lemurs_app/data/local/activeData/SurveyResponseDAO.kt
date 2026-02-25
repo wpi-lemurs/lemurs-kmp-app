@@ -7,6 +7,9 @@ import io.realm.kotlin.ext.query
 interface SurveyResponseDAO : BaseDAO<SurveyResponse> {
     suspend fun getById(id: String): SurveyResponse?
     suspend fun getByType(type: String): List<SurveyResponse>
+    suspend fun getByTypeInt(type: Int): List<SurveyResponse>
+    suspend fun getUnsubmittedByType(type: Int): SurveyResponse?
+    suspend fun deleteUnsubmittedByType(type: Int)
 
     suspend fun modifySubmission(survey: SurveyResponse, newSurveyId: Int)
 }
@@ -18,6 +21,21 @@ class SurveyResponseDAOImpl : BaseDAOImpl<SurveyResponse>(SurveyResponse::class)
 
     override suspend fun getByType(type: String): List<SurveyResponse> {
         return realm().query<SurveyResponse>("type == $0", type).find()
+    }
+
+    override suspend fun getByTypeInt(type: Int): List<SurveyResponse> {
+        return realm().query<SurveyResponse>("type == $0", type).find()
+    }
+
+    override suspend fun getUnsubmittedByType(type: Int): SurveyResponse? {
+        return realm().query<SurveyResponse>("type == $0 AND submitted == false", type).first().find()
+    }
+
+    override suspend fun deleteUnsubmittedByType(type: Int) {
+        realm().write {
+            val unsubmitted = query<SurveyResponse>("type == $0 AND submitted == false", type).find()
+            delete(unsubmitted)
+        }
     }
 
     override suspend fun modifySubmission(survey: SurveyResponse, newSurveyId: Int) {
