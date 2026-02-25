@@ -88,6 +88,54 @@ class AppRepository(
         writingDAO.insert(response)
     }
 
+    /**
+     * Clears any stale unsubmitted weekly survey data before starting a new weekly survey session.
+     * This prevents duplicate survey submissions when navigating between screens.
+     * It removes:
+     * - Unsubmitted weekly survey responses (type = 2, submitted = false)
+     * - Associated audio data with provisional IDs (negative surveyResponseIds)
+     * - Associated written data with provisional IDs (negative surveyResponseIds)
+     */
+    suspend fun clearStaleWeeklySurveyData() {
+        try {
+            // Get all unsubmitted weekly surveys
+            val unsubmittedWeeklySurveys = surveyResponseDAO.getByTypeInt(2).filter { !it.submitted }
+
+            for (survey in unsubmittedWeeklySurveys) {
+                val provisionalId = -survey.getID()
+                Logger.withTag("AppRepository").d("Clearing stale weekly survey data for provisionalId: $provisionalId")
+
+                // Delete associated audio data
+                try {
+                    val audio = audioDAO.getAudioDataBySurveyResponseId(provisionalId)
+                    if (audio != null) {
+                        audioDAO.delete(audio)
+                        Logger.withTag("AppRepository").d("Deleted stale audio data for provisionalId: $provisionalId")
+                    }
+                } catch (e: Exception) {
+                    Logger.withTag("AppRepository").e("Error deleting stale audio: ${e.message}")
+                }
+
+                // Delete associated written data
+                try {
+                    val written = writingDAO.getWrittenDataBySurveyResponseId(provisionalId)
+                    if (written != null) {
+                        writingDAO.delete(written)
+                        Logger.withTag("AppRepository").d("Deleted stale written data for provisionalId: $provisionalId")
+                    }
+                } catch (e: Exception) {
+                    Logger.withTag("AppRepository").e("Error deleting stale written: ${e.message}")
+                }
+
+                // Delete the survey response itself
+                surveyResponseDAO.delete(survey)
+                Logger.withTag("AppRepository").d("Deleted stale survey response for localID: ${survey.getID()}")
+            }
+        } catch (e: Exception) {
+            Logger.withTag("AppRepository").e("Error clearing stale weekly survey data: ${e.message}")
+        }
+    }
+
 
     // Check WiFi connectivity (stub, implement platform-specific)
     suspend fun isWifiAvailable(): Boolean {
