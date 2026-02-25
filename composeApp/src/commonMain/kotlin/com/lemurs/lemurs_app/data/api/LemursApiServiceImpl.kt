@@ -145,17 +145,21 @@ class LemursApiServiceImpl(private val client: HttpClient) {
         val webAuth = WebAPIAuthorizationService()
         val authenticatedClient = webAuth.getHttpClient()
 
-        val jsonb = """ 
-            {
-                "survey_response_id": "${inputData.surveyResponseId}",
-                "written_question_id": "${inputData.writtenQuestionId}",
-                "written_data" : "${inputData.writtenData}",
-                "timestamp" : "${inputData.timestamp}"
-            }
-        """.trimIndent()
+        // Properly escape the written data for JSON (handles newlines, quotes, etc.)
+        val escapedWrittenData = inputData.writtenData
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+
+        val jsonb = """{"survey_response_id":"${inputData.surveyResponseId}","written_question_id":"${inputData.writtenQuestionId}","written_data":"$escapedWrittenData","timestamp":"${inputData.timestamp}"}"""
+
+        // Remove leading slash from url if present to avoid double slashes
+        val cleanUrl = url.trimStart('/')
 
         val response: HttpResponse =
-            authenticatedClient.post("https://${Constants.LEMURS_API_URL}/api/$url") {
+            authenticatedClient.post("https://${Constants.LEMURS_API_URL}/api/$cleanUrl") {
                 contentType(ContentType.Application.Json)
                 setBody(jsonb)
             }
