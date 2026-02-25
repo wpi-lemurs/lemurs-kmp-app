@@ -17,6 +17,11 @@ struct iOSApp: App {
         // This also registers background tasks with BGTaskScheduler
         registerHealthDataSchedulerWithKotlin()
 
+        // Register the Bluetooth Swift bridge with Kotlin
+        // This also registers background tasks with BGTaskScheduler
+        registerBluetoothBridgeWithKotlin()
+        registerBluetoothSchedulerWithKotlin()
+
         // Initialize Koin for dependency injection
         MainViewControllerKt.doInitKoin()
 
