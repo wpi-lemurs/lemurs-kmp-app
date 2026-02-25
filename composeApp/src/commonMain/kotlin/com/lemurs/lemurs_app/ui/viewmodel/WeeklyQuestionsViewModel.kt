@@ -73,6 +73,14 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
     }
 
     suspend fun submitSurvey(onSurveySuccess: ((Int) -> Unit)? = null) {
+        // Check if we already have an unsubmitted weekly survey in progress
+        // This prevents creating duplicate entries when navigating between screens
+        if (_surveyAlreadySubmitted && _currentSurveyResponseId.value != -1) {
+            logger.d { "Survey already submitted in this session, using existing surveyResponseId: ${_currentSurveyResponseId.value}" }
+            onSurveySuccess?.invoke(_currentSurveyResponseId.value)
+            return
+        }
+
         val now = Clock.System.now()
         val completedSurveys = ArrayList<CompletedSurveys>()
 
@@ -88,6 +96,10 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
 
         try {
+            // Clear any stale unsubmitted weekly surveys and their associated data
+            // before creating a new one to prevent duplicates
+            appRepository.clearStaleWeeklySurveyData()
+
             for (completedSurvey in completedSurveys) {
                 val answersMap = completedSurvey.answers.associate { it.id.toString() to it.answer }
                 val answersJson = Json.encodeToString(answersMap)
