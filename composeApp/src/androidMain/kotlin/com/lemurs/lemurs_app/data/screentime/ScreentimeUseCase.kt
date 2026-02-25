@@ -117,6 +117,22 @@ class ScreentimeUseCase(
             }
         }
 
+        // If no screentime was detected, insert a meaningless entry to indicate
+        // data collection was successful but user wasn't using their phone.
+        // distingush betwween no activity and no lemurs app running
+        if (screentimeDataList.isEmpty()) {
+            val heartbeatEntry = Screentime(
+                System.currentTimeMillis().toString(),
+                Instant.fromEpochMilliseconds(fifteenMinAgo).toString(),
+                Instant.fromEpochMilliseconds(now).toString(),
+                "com.lemurs.no_screentime_detected",
+                0L,  // Zero usage time
+                Instant.fromEpochMilliseconds(now).toString()
+            )
+            logger.w("No screentime detected in interval, inserting heartbeat entry")
+            screentimeDataList.add(heartbeatEntry)
+        }
+
         return screentimeDataList
     }
 
