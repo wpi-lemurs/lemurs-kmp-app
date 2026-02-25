@@ -39,6 +39,8 @@ fun WeeklyQuestionsScreen(onNavigateTo: (String) -> Unit) {
   androidx.compose.runtime.LaunchedEffect(Unit) {
     submissionViewModel.clearSurveyItems()
     submissionViewModel.setSurveyType("weekly")
+    // Reset survey state to prevent duplicate submissions from previous sessions
+    viewModel.resetSurveyState()
   }
 
   // Show a loading indicator while the survey data is being fetched
