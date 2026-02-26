@@ -4,9 +4,17 @@
 
 import Foundation
 import BackgroundTasks
-import FamilyControls
-import DeviceActivity
 import ComposeApp
+
+// FamilyControls and DeviceActivity are only available with paid Apple Developer accounts
+// with proper entitlements. We conditionally import them if available.
+#if canImport(FamilyControls)
+import FamilyControls
+#endif
+
+#if canImport(DeviceActivity)
+import DeviceActivity
+#endif
 
 /// Background task identifier for screen time collection
 private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollection"
@@ -25,6 +33,15 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
     /// ScreentimeWorker uses Koin dependency injection, which must be initialized first.
     private lazy var screentimeWorker = ScreentimeWorker()
 
+    /// Check if Family Controls is available (requires paid Apple Developer account)
+    private var isFamilyControlsAvailable: Bool {
+        #if canImport(FamilyControls)
+        return true
+        #else
+        return false
+        #endif
+    }
+
     /// Check if running on simulator
     private var isSimulator: Bool {
         #if targetEnvironment(simulator)
@@ -36,6 +53,14 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
 
     private override init() {
         super.init()
+        if !isFamilyControlsAvailable {
+            print("⚠️ Family Controls framework not available")
+            print("ℹ️  Screen Time functionality requires:")
+            print("   • Paid Apple Developer account")
+            print("   • Family Controls capability enabled in Xcode")
+            print("   • Proper provisioning profile")
+            print("ℹ️  Screen Time features will be disabled")
+        }
     }
 
     // MARK: - Background Task Registration
@@ -63,21 +88,37 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
     /// Check if Screen Time authorization is granted (iOS 15+).
     @available(iOS 15.0, *)
     @objc public func isAuthorizationGranted() -> Bool {
+        guard isFamilyControlsAvailable else {
+            print("ℹ️ Screen Time authorization check skipped - Family Controls not available")
+            return false
+        }
+
         if isSimulator {
             print("ℹ️ Screen Time authorization check skipped on Simulator")
             return false
         }
 
+        #if canImport(FamilyControls)
         let status = AuthorizationCenter.shared.authorizationStatus
         let isAuthorized = status == .approved
         print("ℹ️ Screen Time authorization status: \(status.rawValue), authorized: \(isAuthorized)")
         return isAuthorized
+        #else
+        return false
+        #endif
     }
 
     /// Request Screen Time authorization from the user (iOS 15+).
     /// This presents a system dialog requiring user approval.
     @available(iOS 15.0, *)
     @objc public func requestAuthorization(completion: @escaping (Bool) -> Void) {
+        guard isFamilyControlsAvailable else {
+            print("⚠️ Screen Time authorization not available - Family Controls framework missing")
+            print("ℹ️  Requires paid Apple Developer account with Family Controls capability")
+            completion(false)
+            return
+        }
+
         if isSimulator {
             print("⚠️ Screen Time authorization not available on Simulator")
             print("ℹ️  Family Controls requires a physical iOS device")
@@ -85,6 +126,7 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
             return
         }
 
+        #if canImport(FamilyControls)
         let center = AuthorizationCenter.shared
 
         Task {
@@ -111,6 +153,9 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
                 completion(false)
             }
         }
+        #else
+        completion(false)
+        #endif
     }
 
     // MARK: - Task Scheduling
@@ -206,7 +251,7 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
 
         // Call the Kotlin worker to perform the actual work
         screentimeWorker.executeWork { success in
-            let successBool = success.boolValue
+            let successBool = success as! Bool
             print(successBool ? "✅ Screen time collection work completed" : "❌ Screen time collection work failed")
             completion(successBool)
         }
@@ -325,6 +370,7 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
     /// Check if Screen Time authorization is granted.
     @available(iOS 15.0, *)
     @objc public func isAuthorized() -> Bool {
+        #if canImport(FamilyControls)
         #if targetEnvironment(simulator)
         print("ℹ️ Screen Time authorization check skipped on Simulator")
         return false
@@ -333,6 +379,10 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
         let authorized = status == .approved
         print("ℹ️ Screen Time authorization status: \(status.rawValue), authorized: \(authorized)")
         return authorized
+        #endif
+        #else
+        print("ℹ️ Screen Time authorization check skipped - Family Controls not available")
+        return false
         #endif
     }
 }
