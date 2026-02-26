@@ -101,7 +101,13 @@ class ScreentimeUseCase(
         for ((pkgName, totalTime) in appTotalDurations) {
             if (totalTime > 0) {
                 val lastUsed = lastEventTimes[pkgName] ?: 0L
-                val lastTimeUsedDate = Instant.fromEpochMilliseconds(lastUsed).toString()
+                // If the last event for this app is ACTIVITY_RESUMED, set lastTimeUsed to now
+                val lastEventType = appStartTimes[pkgName]?.let { _ -> UsageEvents.Event.ACTIVITY_RESUMED } // If app is still active
+                val lastTimeUsedDate = if (lastEventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    Instant.fromEpochMilliseconds(now).toString()
+                } else {
+                    Instant.fromEpochMilliseconds(lastUsed).toString()
+                }
 
                 val screentimeData = Screentime(
                     System.currentTimeMillis().toString(),
