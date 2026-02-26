@@ -359,7 +359,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.iOS.v1";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
