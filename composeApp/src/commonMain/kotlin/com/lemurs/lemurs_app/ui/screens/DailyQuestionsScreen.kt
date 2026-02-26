@@ -52,10 +52,14 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
     var categorizedQuestionsLength = 1
     val scrollState = rememberScrollState()
     val submissionViewModel: SubmissionViewModel = koinInject()
-    // Don't clear items here - it interferes with submission screen display
-    // submissionViewModel.clearSurveyItems()
     val showDangerAlert = remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+
+    // Set survey type and clear items at start of daily survey
+    LaunchedEffect(Unit) {
+        submissionViewModel.clearSurveyItems()
+        submissionViewModel.setSurveyType("daily")
+    }
 
     // Track submission state to prevent multiple submissions
     var isSubmitting by remember { mutableStateOf(false) }
