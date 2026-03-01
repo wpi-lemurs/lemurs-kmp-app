@@ -68,6 +68,8 @@ import lemurs_app.composeapp.generated.resources.wpi_logo_g
 import org.jetbrains.compose.resources.Font
 import org.jetbrains.compose.resources.painterResource
 import com.lemurs.lemurs_app.util.UriOpener
+import com.lemurs.lemurs_app.util.DemoMode
+import kotlinx.datetime.Clock
 
 @Composable
 fun LoginScreen(
@@ -76,6 +78,12 @@ fun LoginScreen(
     uriOpener: UriOpener
 ) {
     var isSigningIn by remember { mutableStateOf(false) }
+
+    // Hidden demo mode activation: tap lemur icon 5 times
+    var demoTapCount by remember { mutableStateOf(0) }
+    var lastTapTime by remember { mutableStateOf(0L) }
+    val demoTapThreshold = 5
+    val tapTimeoutMs = 3000L // Reset tap count if more than 3 seconds between taps
 
     microsoftService.initClient(onNavigateTo)
 //    val uriHandler = LocalUriHandler.current
@@ -98,12 +106,28 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Top
         ) {
             Spacer(modifier = Modifier.height(32.dp))
-            // Lemur Icon
+            // Lemur Icon - Hidden demo mode: tap 5 times to activate
             Box(
                 modifier = Modifier
                     .sizeIn(maxWidth = 175.dp, maxHeight = 175.dp)
                     .background(Color.Unspecified, shape = RoundedCornerShape(32.dp))
-                    .padding(16.dp),
+                    .padding(16.dp)
+                    .clickable {
+                        val currentTime = Clock.System.now().toEpochMilliseconds()
+                        // Reset tap count if too much time has passed
+                        if (currentTime - lastTapTime > tapTimeoutMs) {
+                            demoTapCount = 0
+                        }
+                        lastTapTime = currentTime
+                        demoTapCount++
+
+                        if (demoTapCount >= demoTapThreshold) {
+                            // Activate demo mode and navigate to main
+                            DemoMode.activate()
+                            demoTapCount = 0
+                            onNavigateTo(LemurScreen.Main.name)
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

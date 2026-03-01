@@ -35,6 +35,12 @@ class ScreentimeDataUseCase(
     suspend fun sendData(dao : ScreentimeDAO): Boolean {
         var data: List<Screentime> = dao.getAll()
         if (data.isNotEmpty()) {
+            // Log heartbeat entries for debugging
+            val heartbeatCount = data.count { it.appName == "com.lemurs.no_screentime_detected" }
+            if (heartbeatCount > 0) {
+                co.touchlab.kermit.Logger.withTag("Screentime").w("Sending $heartbeatCount heartbeat entries (no screentime detected)")
+            }
+
             val chunkSize = 100 // cutting the screentime data into chuncks of 100 so that the app doesn't run out of memory
             val chunks = data.chunked(chunkSize)
             for (chunk in chunks) {

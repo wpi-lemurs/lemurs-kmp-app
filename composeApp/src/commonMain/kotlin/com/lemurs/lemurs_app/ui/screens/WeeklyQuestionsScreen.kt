@@ -35,8 +35,14 @@ fun WeeklyQuestionsScreen(onNavigateTo: (String) -> Unit) {
   // Track submission state to prevent multiple submissions
   var isSubmitting by remember { mutableStateOf(false) }
 
-  // Don't clear items here - it interferes with submission screen display
-  // submissionViewModel.clearSurveyItems()
+  // Set survey type and clear items at start of weekly survey
+  androidx.compose.runtime.LaunchedEffect(Unit) {
+    submissionViewModel.clearSurveyItems()
+    submissionViewModel.setSurveyType("weekly")
+    // Reset survey state to prevent duplicate submissions from previous sessions
+    viewModel.resetSurveyState()
+  }
+
   // Show a loading indicator while the survey data is being fetched
   if (viewModel.surveys.value == null) {
     CircularProgressIndicator()

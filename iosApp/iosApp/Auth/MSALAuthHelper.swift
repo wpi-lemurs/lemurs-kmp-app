@@ -25,8 +25,7 @@ import MSAL
     // Set to nil to let MSAL generate the default redirect URI based on bundle ID
     // The generated URI will be: msauth.<bundle-id>://auth
     // Make sure to register this URI in Azure AD portal
-    private var redirectUri: String? = "msauth://com.lemurs/eDGA8nYbBjK0xbfLpARG7LlolfU%3D"
-
+    private var redirectUri: String? = "msauth.com.lemurs.iOS.v1://auth"
     private override init() {
         super.init()
     }
