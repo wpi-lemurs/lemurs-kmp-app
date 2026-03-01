@@ -265,7 +265,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.Santiago";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.santiagogiraldo.lemurs";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -365,7 +365,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.Santiago";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.lemurs.lemurs-app.Lemurs.santiagogiraldo.lemurs";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

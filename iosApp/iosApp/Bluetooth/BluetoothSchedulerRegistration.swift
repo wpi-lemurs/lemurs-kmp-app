@@ -8,5 +8,5 @@ public func registerBluetoothSchedulerWithKotlin() {
     // (Optional) schedule one immediately on startup
     BluetoothDataTaskScheduler.shared.scheduleBackgroundBluetoothScan()
 
-    print("✅ Bluetooth scheduler registered")
+    print("✅ (CoreBluetooth) Bluetooth scheduler registered")
 }
