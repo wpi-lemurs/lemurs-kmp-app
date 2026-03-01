@@ -56,14 +56,25 @@ fun ResourcesScreen(
         }
         Column(modifier = Modifier.fillMaxSize().padding(32.dp)) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "WPI SDCC: 508-831-5540",
-                //            fontSize = 16.sp
+            ClickableText(
+                text = buildAnnotatedString {
+                    append("WPI SDCC: ")
+                    withStyle(
+                        style = SpanStyle(
+                            color = LemurButtonBlue,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
+                        append("508-831-5540")
+                    }
+                },
+                onClick = { offset ->
+                    uriOpener.openUri("tel:508-831-5540")
+                }
             )
             Spacer(modifier = Modifier.height(8.dp))
             ClickableText(
                 text = buildAnnotatedString {
-                    pushStringAnnotation(tag = "URL", annotation = "https://emutivo.wpi.edu/")
                     withStyle(
                         style = SpanStyle(
                             color = LemurButtonBlue,
@@ -72,36 +83,90 @@ fun ResourcesScreen(
                     ) {
                         append("Click here to go to the EMUTIVO Website")
                     }
-                    pop()
                 },
                 onClick = { offset ->
                     uriOpener.openUri("https://emutivo.wpi.edu/")
                 }
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                buildAnnotatedString {
-                    withStyle(
-                        style = SpanStyle(
-                            fontStyle = FontStyle.Italic,
-                            fontWeight = FontWeight.Bold,
-                            color = LemurBlack
-                        )
-                    ) {
-                        append("\n\nUMASS: ")
-                    }
-                    append("If you are having a mental health crisis, please call CCPH at 413-545-2337, or call or text 988.")
 
+            // UMASS Section
+            Text(
+                text = "UMASS:",
+                fontStyle = FontStyle.Italic,
+                fontWeight = FontWeight.Bold,
+                color = LemurBlack
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            ClickableText(
+                text = buildAnnotatedString {
+                    append("If you are having a mental health crisis, please call CCPH at ")
                     withStyle(
                         style = SpanStyle(
-                            fontStyle = FontStyle.Italic,
-                            fontWeight = FontWeight.Bold,
-                            color = LemurBlack
+                            color = LemurButtonBlue,
+                            textDecoration = TextDecoration.Underline
                         )
                     ) {
-                        append("\n\nWPI: ")
+                        append("413-545-2337")
                     }
-                    append("If you are having a mental health crisis, please contact SDCC at 508-831-5540, or call or text 988.")
+                    append(", or call or text ")
+                    withStyle(
+                        style = SpanStyle(
+                            color = LemurButtonBlue,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
+                        append("988")
+                    }
+                    append(".")
+                },
+                onClick = { offset ->
+                    // Check which phone number was clicked based on offset
+                    when {
+                        offset in 62..73 -> uriOpener.openUri("tel:413-545-2337")
+                        offset in 90..92 -> uriOpener.openUri("tel:988")
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // WPI Section
+            Text(
+                text = "WPI:",
+                fontStyle = FontStyle.Italic,
+                fontWeight = FontWeight.Bold,
+                color = LemurBlack
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            ClickableText(
+                text = buildAnnotatedString {
+                    append("If you are having a mental health crisis, please contact SDCC at ")
+                    withStyle(
+                        style = SpanStyle(
+                            color = LemurButtonBlue,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
+                        append("508-831-5540")
+                    }
+                    append(", or call or text ")
+                    withStyle(
+                        style = SpanStyle(
+                            color = LemurButtonBlue,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    ) {
+                        append("988")
+                    }
+                    append(".")
+                },
+                onClick = { offset ->
+                    // Check which phone number was clicked based on offset
+                    when {
+                        offset in 65..76 -> uriOpener.openUri("tel:508-831-5540")
+                        offset in 93..95 -> uriOpener.openUri("tel:988")
+                    }
                 }
             )
         }

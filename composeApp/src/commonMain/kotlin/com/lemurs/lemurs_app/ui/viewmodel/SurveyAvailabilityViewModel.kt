@@ -5,11 +5,13 @@ import androidx.lifecycle.ViewModel
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.survey.fetchAndParseAvailability
 import com.lemurs.lemurs_app.util.Constants
+import com.lemurs.lemurs_app.util.DemoMode
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.until
+import kotlin.time.Duration.Companion.hours
 
 class SurveyAvailabilityViewModel : ViewModel() {
     private var availability = mutableStateOf<Map<String, Instant>?>(null)
@@ -19,6 +21,16 @@ class SurveyAvailabilityViewModel : ViewModel() {
     private var debugModeEnabled = mutableStateOf(Constants.debugModeEnabled)
 
     fun getAvailability(): Map<String, Instant>? {
+        // In demo mode, return mock availability (surveys always available)
+        if (DemoMode.isActive) {
+            logger.d("Demo mode: surveys always available")
+            val now = Clock.System.now()
+            return mapOf(
+                "daily" to now.minus(1.hours),
+                "weekly" to now.minus(1.hours)
+            )
+        }
+
         if (availability.value == null) {
             runBlocking {
                 refreshAvailability()
@@ -29,6 +41,12 @@ class SurveyAvailabilityViewModel : ViewModel() {
     }
 
     suspend fun refreshAvailability() {
+        // In demo mode, don't make API calls
+        if (DemoMode.isActive) {
+            logger.d("Demo mode: skipping availability refresh")
+            return
+        }
+
         try {
             availability.value = fetchAndParseAvailability()
         } catch (e: Exception) {
@@ -37,6 +55,12 @@ class SurveyAvailabilityViewModel : ViewModel() {
     }
 
     fun secondsUntilAvailable(type: String): Long? {
+        // If demo mode is enabled, always return that surveys are available
+        if (DemoMode.isActive) {
+            logger.d("Demo mode enabled - survey '$type' is always available")
+            return -1L // Negative value indicates survey is available
+        }
+
         // If debug mode is enabled, always return that surveys are available
         if (debugModeEnabled.value) {
             logger.d("Debug mode enabled - survey '$type' is always available")

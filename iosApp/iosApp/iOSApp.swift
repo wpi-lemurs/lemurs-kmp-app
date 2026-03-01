@@ -17,8 +17,12 @@ struct iOSApp: App {
         // This also registers background tasks with BGTaskScheduler
         registerHealthDataSchedulerWithKotlin()
 
-        // Initialize Koin for dependency injection BEFORE registering Screen Time
-        // (ScreentimeWorker uses Koin dependencies)
+        // Register the Bluetooth Swift bridge with Kotlin
+        // This also registers background tasks with BGTaskScheduler
+        registerBluetoothBridgeWithKotlin()
+        registerBluetoothSchedulerWithKotlin()
+
+        // Initialize Koin for dependency injection
         MainViewControllerKt.doInitKoin()
 
         // Register the Screen Time Scheduler bridge with Kotlin
