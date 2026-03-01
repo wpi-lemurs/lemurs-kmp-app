@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -115,6 +116,20 @@ actual fun AudioScreen(onNavigateTo: (String) -> Unit) {
                 if (!granted) {
                     logger.w { "Microphone permission denied" }
                 }
+            }
+        }
+    }
+
+    // Cleanup: Stop audio playback and recording when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            logger.d { "AudioScreen disposed - stopping audio playback and recording" }
+            if (audioViewModel.isPlaying.value) {
+                audioViewModel.stopAudio()
+            }
+            // Also stop recording if still in progress when leaving
+            if (isRecording) {
+                audioViewModel.stopRecording()
             }
         }
     }
