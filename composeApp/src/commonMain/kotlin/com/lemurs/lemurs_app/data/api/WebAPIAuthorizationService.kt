@@ -2,6 +2,7 @@ package com.lemurs.lemurs_app.data.api
 
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.datastore.JwtTokenResponseImpl
+import com.lemurs.lemurs_app.util.DemoMode
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -63,6 +64,25 @@ class WebAPIAuthorizationService : KoinComponent {
      */
     fun getHttpClient() : HttpClient {
         logger.w("Getting Http Client")
+
+        // In demo mode, return a basic client without auth (for App Review)
+        if (DemoMode.isActive) {
+            logger.w("Demo mode active - returning client without authentication")
+            return createPlatformHttpClient {
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 60000
+                    connectTimeoutMillis = 15000
+                }
+                install(ContentNegotiation) {
+                    json()
+                }
+                install(Logging) {
+                    logger = io.ktor.client.plugins.logging.Logger.SIMPLE
+                    level = LogLevel.ALL
+                }
+            }
+        }
+
         lateinit var jwtTokenResponse : JwtTokenResponseObject
         runBlocking {
             jwtTokenResponse = jwtTokenResponseData.buildJwtTokenResponse()
