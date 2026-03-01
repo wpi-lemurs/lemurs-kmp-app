@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleDisplayName</key>
+        <string>WPI Lemurs</string>
+        <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.lemurs.bluetooth.scan</string>
@@ -14,8 +18,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>msauth</string>
-				<string>msauth.$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+				<string>msauth.com.lemurs.iOS.v1</string>
 			</array>
 		</dict>
 	</array>

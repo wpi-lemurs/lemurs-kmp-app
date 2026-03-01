@@ -42,6 +42,9 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
     // Add survey response ID management
     private val _currentSurveyResponseId = MutableStateFlow<Int>(-1)
 
+    // Track if survey has already been submitted to prevent duplicate submissions
+    private var _surveyAlreadySubmitted = false
+
     val logger = Logger.withTag("WeeklyQuestions")
     private val appRepository: AppRepository by inject()
 
@@ -70,6 +73,14 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
     }
 
     suspend fun submitSurvey(onSurveySuccess: ((Int) -> Unit)? = null) {
+        // Check if we already have an unsubmitted weekly survey in progress
+        // This prevents creating duplicate entries when navigating between screens
+        if (_surveyAlreadySubmitted && _currentSurveyResponseId.value != -1) {
+            logger.d { "Survey already submitted in this session, using existing surveyResponseId: ${_currentSurveyResponseId.value}" }
+            onSurveySuccess?.invoke(_currentSurveyResponseId.value)
+            return
+        }
+
         val now = Clock.System.now()
         val completedSurveys = ArrayList<CompletedSurveys>()
 
@@ -85,6 +96,10 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
 
         try {
+            // Clear any stale unsubmitted weekly surveys and their associated data
+            // before creating a new one to prevent duplicates
+            appRepository.clearStaleWeeklySurveyData()
+
             for (completedSurvey in completedSurveys) {
                 val answersMap = completedSurvey.answers.associate { it.id.toString() to it.answer }
                 val answersJson = Json.encodeToString(answersMap)
@@ -99,10 +114,10 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)
                 // Get provisionally a survey response ID
-                // Negative ID indicates a failed submission
+                // Negative ID indicates a pending submission (not yet submitted to server)
                 setCurrentSurveyResponseId(-1 * completedSurvey.id)
-                // Schedule background worker to retry
-                SendDataScheduler().scheduleSurveyResponse()
+                // NOTE: Don't schedule background worker here - submitAllWeeklyData() will handle
+                // the immediate submission, and only schedule a retry worker if that fails.
                 onSurveySuccess?.invoke(-1 * completedSurvey.id)
             }
         } catch (e: Exception) {
@@ -158,9 +173,25 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
 
         try {
+            // If survey already submitted, just execute queued requests with existing surveyResponseId
+            if (_surveyAlreadySubmitted && _currentSurveyResponseId.value != -1) {
+                logger.d { "Survey already submitted, executing ${_requestStack1.value.size} queued requests with existing surveyResponseId: ${_currentSurveyResponseId.value}" }
+                for (request in _requestStack1.value) {
+                    try {
+                        logger.d { "Invoking request with surveyResponseId: ${_currentSurveyResponseId.value}" }
+                        request.invoke(_currentSurveyResponseId.value)
+                    } catch (e: Exception) {
+                        logger.e("Error executing request: ${e.message}", e)
+                    }
+                }
+                clearRequests()
+                return
+            }
+
             logger.d { "Submitting survey first to get surveyResponseId" }
             // Submit survey and wait for the response
             submitSurvey { surveyResponseId ->
+                _surveyAlreadySubmitted = true
                 logger.d { "Survey submitted successfully, now executing ${_requestStack1.value.size} queued requests with surveyResponseId: $surveyResponseId" }
                 // Execute all queued requests with the surveyResponseId
                 for (request in _requestStack1.value) {
@@ -206,6 +237,17 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         logger.d { "Cleared survey response ID: $clearedId" }
     }
 
+    /**
+     * Resets the survey submission state for a new survey session.
+     * This should be called when starting a new weekly survey.
+     */
+    fun resetSurveyState() {
+        _surveyAlreadySubmitted = false
+        _currentSurveyResponseId.value = -1
+        _requestStack1.value.clear()
+        logger.d { "Reset survey state for new session" }
+    }
+
     fun clearRequests() {
         _requestStack1.value.clear()
     }
@@ -248,6 +290,8 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
     suspend fun submitAllWeeklyData() {
         if(appRepository.handleSurveyResponse()){
             logger.d { "All weekly data submitted successfully" }
+            // Reset state for next weekly survey session
+            resetSurveyState()
         }
         else {
             logger.e { "Failed to submit all weekly data" }

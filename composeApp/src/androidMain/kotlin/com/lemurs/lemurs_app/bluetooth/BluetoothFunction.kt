@@ -227,11 +227,22 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
                         )
                         logger.w("Bluetooth data inserted into database successfully")
 
-                        val bluetoothDataUseCase = BluetoothDataUseCase(bluetoothDAO)
-                        bluetoothDataUseCase.call()
-                        logger.w("Bluetooth data submitted to API")
+                        try {
+                            val bluetoothDataUseCase = BluetoothDataUseCase(bluetoothDAO)
+                            val result = bluetoothDataUseCase.call()
+                            when (result) {
+                                is UseCaseResult.Success -> logger.w("Bluetooth data submitted to API successfully")
+                                is UseCaseResult.Failure -> logger.w("Bluetooth data submission to API failed")
+                            }
+                        } catch (e: java.nio.channels.UnresolvedAddressException) {
+                            logger.e("Network error: Cannot resolve API host. Check network connectivity and DNS.", e)
+                        } catch (e: java.net.UnknownHostException) {
+                            logger.e("Network error: Unknown host. Check network connectivity.", e)
+                        } catch (e: Exception) {
+                            logger.e("Error submitting Bluetooth data to API: ${e.message}", e)
+                        }
                     } catch (e: Exception) {
-                        logger.e("Error inserting Bluetooth data: ${e.message}", e)
+                        logger.e("Error inserting Bluetooth data into remote database: ${e.message}", e)
                     }
                 }
             },
