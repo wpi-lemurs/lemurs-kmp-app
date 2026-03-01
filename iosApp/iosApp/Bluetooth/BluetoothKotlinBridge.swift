@@ -4,8 +4,11 @@ import CoreBluetooth
 @objc public final class BluetoothKotlinBridge: NSObject {
     @objc public static let shared = BluetoothKotlinBridge()
 
-    private var central: CBCentralManager?
+    private var central: CBCentralManager!
     private var discovered = Set<String>()
+
+    private var pendingDuration: Int = 15
+    private var scanning = false
 
     private var onSuccess: (([String]) -> Void)?
     private var onError: ((String) -> Void)?
@@ -13,40 +16,55 @@ import CoreBluetooth
 
     private override init() {
         super.init()
+
+        central = CBCentralManager(
+            delegate: self,
+            queue: .main,
+            options: nil
+        )
+        print("🟦 (CoreBluetooth) BluetoothKotlinBridge central created")
     }
 
-    /// Call from adapter. Starts central manager if needed, then scans when poweredOn.
-    public func scan(
-        durationSeconds: Int,
-        onSuccess: @escaping ([String]) -> Void,
-        onError: @escaping (String) -> Void
-    ) {
+    public func scan(durationSeconds: Int,
+                     onSuccess: @escaping ([String]) -> Void,
+                     onError: @escaping (String) -> Void) {
+
+        print("🟦 (CoreBluetooth) BluetoothKotlinBridge.scan called for \(durationSeconds)s")
         self.onSuccess = onSuccess
         self.onError = onError
+        self.pendingDuration = durationSeconds
         self.discovered.removeAll()
 
-        // Using restoration identifier is useful if iOS relaunches you for BLE events.
-        let options: [String: Any] = [
-            CBCentralManagerOptionRestoreIdentifierKey: "com.lemurs.bluetooth.restore"
-        ]
+        // if state already powered on, start immediately
+        if central.state == .poweredOn {
+            startScanNow()
+        } else {
+            // otherwise wait for centralManagerDidUpdateState
+            print("🟦 (CoreBluetooth) waiting for central state, current=\(central.state.rawValue)")
+        }
+    }
 
-        // Important: Use main queue for delegate callbacks to be predictable.
-        self.central = CBCentralManager(delegate: self, queue: .main, options: options)
+    private func startScanNow() {
+        guard !scanning else { return }
+        scanning = true
 
-        // Stop timer (cancel any previous)
+        print("🟩 (CoreBluetooth) startScanNow")
+        central.scanForPeripherals(withServices: nil, options: nil)
+
         stopWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
             self?.finishScan(success: true)
         }
         stopWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(durationSeconds), execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(pendingDuration), execute: item)
     }
 
     private func finishScan(success: Bool) {
-        central?.stopScan()
-        if success {
-            onSuccess?(Array(discovered))
-        }
+        print("🟨 (CoreBluetooth) finishScan success=\(success) count=\(discovered.count)")
+        central.stopScan()
+        scanning = false
+
+        if success { onSuccess?(Array(discovered)) }
         onSuccess = nil
         onError = nil
         stopWorkItem = nil
@@ -55,41 +73,35 @@ import CoreBluetooth
 
 extension BluetoothKotlinBridge: CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        print("🟦 (CoreBluetooth) central state update = \(central.state.rawValue)")
+
         switch central.state {
         case .poweredOn:
-            central.scanForPeripherals(withServices: nil, options: nil)
+            startScanNow()
 
         case .unsupported:
-            onError?("Bluetooth unsupported on this device")
+            onError?("Bluetooth unsupported")
             finishScan(success: false)
 
         case .unauthorized:
-            onError?("Bluetooth unauthorized (check permissions)")
+            onError?("Bluetooth unauthorized")
             finishScan(success: false)
 
         case .poweredOff:
-            onError?("Bluetooth is powered off")
+            onError?("Bluetooth powered off")
             finishScan(success: false)
 
         default:
-            // resetting / unknown: wait; if you want you can timeout earlier
             break
         }
     }
 
-    public func centralManager(
-        _ central: CBCentralManager,
-        didDiscover peripheral: CBPeripheral,
-        advertisementData: [String : Any],
-        rssi RSSI: NSNumber
-    ) {
+    public func centralManager(_ central: CBCentralManager,
+                               didDiscover peripheral: CBPeripheral,
+                               advertisementData: [String : Any],
+                               rssi RSSI: NSNumber) {
         let name = peripheral.name ?? "Unknown"
         let uuid = peripheral.identifier.uuidString
         discovered.insert("\(name) (\(uuid))")
-    }
-
-    public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String : Any]) {
-        // If iOS relaunches your app due to BLE events, you can restart scanning.
-        central.scanForPeripherals(withServices: nil, options: nil)
     }
 }

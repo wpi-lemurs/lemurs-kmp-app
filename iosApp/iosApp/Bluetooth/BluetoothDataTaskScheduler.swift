@@ -30,7 +30,7 @@ private let bluetoothScanTaskIdentifier = "com.lemurs.bluetooth.scan"
             self?.handleBluetoothScanTask(task as! BGAppRefreshTask)
         }
 
-        print("✅ Registered Bluetooth BG task: \(bluetoothScanTaskIdentifier)")
+        print("✅ (CoreBluetooth) Registered Bluetooth BG task: \(bluetoothScanTaskIdentifier)")
     }
 
     // MARK: - Scheduling
@@ -43,34 +43,34 @@ private let bluetoothScanTaskIdentifier = "com.lemurs.bluetooth.scan"
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("✅ Scheduled Bluetooth scan (earliest ~15 min)")
+            print("✅ (CoreBluetooth) Scheduled Bluetooth scan (earliest ~15 min)")
         } catch BGTaskScheduler.Error.notPermitted {
-            print("❌ BGTaskScheduler not permitted. Check BGTaskSchedulerPermittedIdentifiers in Info.plist.")
+            print("❌ (CoreBluetooth) BGTaskScheduler not permitted. Check BGTaskSchedulerPermittedIdentifiers in Info.plist.")
         } catch BGTaskScheduler.Error.tooManyPendingTaskRequests {
-            print("⚠️ Too many pending Bluetooth requests (already scheduled).")
+            print("⚠️ (CoreBluetooth) Too many pending Bluetooth requests (already scheduled).")
         } catch BGTaskScheduler.Error.unavailable {
-            print("⚠️ BGTaskScheduler unavailable (background refresh off / simulator / system).")
+            print("⚠️ (CoreBluetooth) BGTaskScheduler unavailable (background refresh off / simulator / system).")
         } catch {
-            print("❌ Failed scheduling Bluetooth scan: \(error.localizedDescription)")
+            print("❌ (CoreBluetooth) Failed scheduling Bluetooth scan: \(error.localizedDescription)")
         }
     }
 
     @objc public func cancelScheduledTasks() {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: bluetoothScanTaskIdentifier)
-        print("🛑 Cancelled scheduled Bluetooth scan task")
+        print("🛑 (CoreBluetooth) Cancelled scheduled Bluetooth scan task")
     }
 
     // MARK: - Handler
 
     private func handleBluetoothScanTask(_ task: BGAppRefreshTask) {
-        print("🔄 Bluetooth BG task started")
+        print("🔄 (CoreBluetooth) Bluetooth BG task started")
 
         // Schedule next run first
         scheduleBackgroundBluetoothScan()
 
         // Expiration handler (system says we're out of time)
         task.expirationHandler = {
-            print("⚠️ Bluetooth BG task expired")
+            print("⚠️ (CoreBluetooth) Bluetooth BG task expired")
             task.setTaskCompleted(success: false)
         }
 
@@ -83,8 +83,13 @@ private let bluetoothScanTaskIdentifier = "com.lemurs.bluetooth.scan"
         // ComposeAppKt.runBluetoothBackgroundScan(durationSeconds: 15)
         BluetoothBackgroundEntrypointKt.runBluetoothBackgroundScan(durationSeconds: 15)
 
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+            task.setTaskCompleted(success: true)
+            print("✅ (CoreBluetooth) Bluetooth BG task completed (delayed)")
+        }
+
         // If you want a more accurate completion, you can add a Kotlin callback later.
         task.setTaskCompleted(success: true)
-        print("✅ Bluetooth BG task completed")
+        print("✅ (CoreBluetooth) Bluetooth BG task completed")
     }
 }
