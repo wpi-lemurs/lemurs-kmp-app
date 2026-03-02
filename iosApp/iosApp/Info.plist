@@ -17,10 +17,10 @@
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>msauth.$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-			</array>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>msauth.com.lemurs.iOS.v1</string>
+            </array>
 		</dict>
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
