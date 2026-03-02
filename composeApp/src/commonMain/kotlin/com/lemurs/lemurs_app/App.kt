@@ -209,8 +209,8 @@ fun NavigationComponent(
         LemurScreen.Audio.name -> AudioScreen(onNavigateTo = navigator::navigateTo)
         LemurScreen.Submission.name -> SubmissionScreen(onNavigateTo = navigator::navigateTo)
         LemurScreen.HealthConnect.name -> HealthScreen(onNavigateTo = navigator::navigateTo)
-        LemurScreen.DailyInformation.name -> DailyInformationScreen(onNavigateTo = navigator::navigateTo, onBack = navigator::goBack)
-        LemurScreen.WeeklyInformation.name -> WeeklyInformationScreen(onNavigateTo = navigator::navigateTo, onBack = navigator::goBack)
+        LemurScreen.DailyInformation.name -> DailyInformationScreen(onNavigateTo = navigator::navigateTo, onBack = navigator::goBack, uriOpener = uriOpener)
+        LemurScreen.WeeklyInformation.name -> WeeklyInformationScreen(onNavigateTo = navigator::navigateTo, onBack = navigator::goBack, uriOpener = uriOpener)
         LemurScreen.Resources.name -> ResourcesScreen(onNavigateTo = navigator::navigateTo, uriOpener)
 
         else -> LoginScreen(onNavigateTo = navigator::navigateTo, microsoftService = microsoftService, uriOpener = uriOpener)
