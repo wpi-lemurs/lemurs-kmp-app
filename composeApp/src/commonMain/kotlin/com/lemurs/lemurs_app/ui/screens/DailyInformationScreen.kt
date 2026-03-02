@@ -88,91 +88,97 @@ fun DailyInformationScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // UMASS Section with clickable phone numbers
-                    Text(
-                        text = "UMASS:",
-                        fontWeight = FontWeight.Bold,
-                        color = LemurBlack
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    ClickableText(
-                        text = buildAnnotatedString {
-                            append("If you are having a mental health crisis, please call CCPH at ")
-                            withStyle(
-                                style = SpanStyle(
-                                    color = LemurButtonBlue,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append("413-545-2337")
+                    // Crisis resources section - left aligned
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        // UMASS Section with clickable phone numbers
+                        Text(
+                            text = "UMASS:",
+                            fontWeight = FontWeight.Bold,
+                            color = LemurBlack
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        ClickableText(
+                            text = buildAnnotatedString {
+                                append("If you are having a mental health crisis, please call CCPH at ")
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = LemurButtonBlue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("413-545-2337")
+                                }
+                                append(", or call or text ")
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = LemurButtonBlue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("988")
+                                }
+                                append(".")
+                            },
+                            onClick = { offset ->
+                                when {
+                                    offset in 62..73 -> uriOpener.openUri("tel:413-545-2337")
+                                    offset in 90..92 -> uriOpener.openUri("tel:988")
+                                }
                             }
-                            append(", or call or text ")
-                            withStyle(
-                                style = SpanStyle(
-                                    color = LemurButtonBlue,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append("988")
-                            }
-                            append(".")
-                        },
-                        onClick = { offset ->
-                            when {
-                                offset in 62..73 -> uriOpener.openUri("tel:413-545-2337")
-                                offset in 90..92 -> uriOpener.openUri("tel:988")
-                            }
-                        }
-                    )
+                        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    // WPI Section with clickable phone numbers
-                    Text(
-                        text = "WPI:",
-                        fontWeight = FontWeight.Bold,
-                        color = LemurBlack
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    ClickableText(
-                        text = buildAnnotatedString {
-                            append("If you are having a mental health crisis, please contact ")
-                            withStyle(
-                                style = SpanStyle(
-                                    color = LemurButtonBlue,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append("508-831-5540")
+                        // WPI Section with clickable phone numbers
+                        Text(
+                            text = "WPI:",
+                            fontWeight = FontWeight.Bold,
+                            color = LemurBlack
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        ClickableText(
+                            text = buildAnnotatedString {
+                                append("If you are having a mental health crisis, please contact ")
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = LemurButtonBlue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("508-831-5540")
+                                }
+                                append(" (or after 5pm ")
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = LemurButtonBlue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("508-831-5555")
+                                }
+                                append("), or call or text ")
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = LemurButtonBlue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("988")
+                                }
+                                append(".")
+                            },
+                            onClick = { offset ->
+                                when {
+                                    offset in 57..68 -> uriOpener.openUri("tel:508-831-5540")
+                                    offset in 84..95 -> uriOpener.openUri("tel:508-831-5555")
+                                    offset in 115..117 -> uriOpener.openUri("tel:988")
+                                }
                             }
-                            append(" (or after 5pm ")
-                            withStyle(
-                                style = SpanStyle(
-                                    color = LemurButtonBlue,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append("508-831-5555")
-                            }
-                            append("), or call or text ")
-                            withStyle(
-                                style = SpanStyle(
-                                    color = LemurButtonBlue,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append("988")
-                            }
-                            append(".")
-                        },
-                        onClick = { offset ->
-                            when {
-                                offset in 57..68 -> uriOpener.openUri("tel:508-831-5540")
-                                offset in 84..95 -> uriOpener.openUri("tel:508-831-5555")
-                                offset in 115..117 -> uriOpener.openUri("tel:988")
-                            }
-                        }
-                    )
+                        )
+                    }
                 }
             }
             item{ Spacer(modifier = Modifier.height(32.dp)) }
