@@ -11,6 +11,7 @@
 		<string>com.lemurs.bluetooth.scan</string>
 		<string>com.lemurs.lemurs_app.healthSync</string>
 		<string>com.lemurs.lemurs_app.screentimeCollection</string>
+		<string>com.lemurs.lemurs_app.sendScreentimeData</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>

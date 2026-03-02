@@ -233,13 +233,12 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
 
         let request = BGAppRefreshTaskRequest(identifier: screentimeTaskIdentifier)
 
-        // Request to run after at least 15 minutes
-        // Note: iOS determines the actual execution time based on usage patterns
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        // FOR TESTING: Run after 2 minutes (change back to 15 for production)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 60)
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("✅ Scheduled background screen time collection for ~15 minutes from now")
+            print("✅ Scheduled background screen time collection for ~2 minutes from now (TESTING)")
         } catch BGTaskScheduler.Error.notPermitted {
             print("❌ BGTaskScheduler: Task not permitted - check Info.plist BGTaskSchedulerPermittedIdentifiers")
         } catch BGTaskScheduler.Error.tooManyPendingTaskRequests {
@@ -401,26 +400,29 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
             return []
         }
 
-        // Read events from shared container written by extension
+        // Try to read events from shared container written by extension
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.com.lemurs.lemurs-app"
         ) else {
             print("❌ Failed to access shared container")
-            return []
+            return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
         }
 
         let fileURL = containerURL.appendingPathComponent("screentime_events.json")
 
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             print("ℹ️  No screen time events file found yet")
-            return []
+            print("ℹ️  DeviceActivityMonitor extension hasn't logged any events")
+            print("ℹ️  Extension triggers at: interval boundaries (midnight) or thresholds (15/30/60 min)")
+            print("🔄 Using fallback: tracking own app usage via lifecycle")
+            return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
         }
 
         do {
             let data = try Data(contentsOf: fileURL)
             guard let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                 print("⚠️ Invalid events format")
-                return []
+                return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
             }
 
             print("📊 Found \(events.count) total events in extension storage")
@@ -436,13 +438,35 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
 
             print("📊 Found \(filteredEvents.count) events in requested time range")
 
+            if filteredEvents.isEmpty {
+                print("ℹ️  No extension events in time range, using fallback")
+                return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            }
+
             // Convert events to Screentime objects
             return convertEventsToScreentime(filteredEvents, startTime: startTime, endTime: endTime)
 
         } catch {
             print("❌ Failed to read events: \(error)")
-            return []
+            return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
         }
+    }
+
+    /// Fallback to own app usage tracking when extension data is not available
+    private func getFallbackUsageData(startTimeMillis: Int64, endTimeMillis: Int64) -> [Screentime] {
+        let tracker = ScreenTimeTracker.shared
+        let ownAppData = tracker.getOwnAppUsage(
+            startTimeMillis: startTimeMillis,
+            endTimeMillis: endTimeMillis
+        )
+
+        if !ownAppData.isEmpty {
+            print("✅ Using own app usage data: \(ownAppData.count) entries")
+        } else {
+            print("ℹ️  No usage data available (user hasn't used app in this time range)")
+        }
+
+        return ownAppData
     }
 
     private func convertEventsToScreentime(_ events: [[String: Any]], startTime: Double, endTime: Double) -> [Screentime] {

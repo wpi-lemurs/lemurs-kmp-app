@@ -22,18 +22,54 @@ struct iOSApp: App {
         registerBluetoothBridgeWithKotlin()
         registerBluetoothSchedulerWithKotlin()
 
+        // Register the Screen Time Swift bridge with Kotlin
+        // This also registers background tasks with BGTaskScheduler
+        registerScreenTimeSchedulerWithKotlin()
+
+        // Initialize ScreenTimeTracker to start tracking own app usage
+        _ = ScreenTimeTracker.shared
+        print("✅ ScreenTimeTracker initialized - tracking own app usage")
+
         // Initialize Koin for dependency injection
         MainViewControllerKt.doInitKoin()
 
-        // Register the Screen Time Scheduler bridge with Kotlin
-        // Must be AFTER Koin initialization since ScreentimeWorker uses Koin
-        registerScreenTimeSchedulerWithKotlin()
+
+        // Initialize SendDataScheduler and register its background tasks
+        let sendDataScheduler = ComposeApp.SendDataScheduler()
+        sendDataScheduler.registerBackgroundTasks()
 
         // Request HealthKit permissions on app start
         requestHealthKitPermissionsOnStart()
 
         // Request Screen Time permissions on app start
         requestScreenTimePermissionsOnStart()
+
+        // FOR TESTING: Trigger immediate screen time collection after a short delay
+        // This ensures we collect data right away instead of waiting for background tasks
+        #if DEBUG
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            print("🔄 [TESTING] Triggering immediate screen time collection")
+            ScreenTimeTaskScheduler.shared.performImmediateCollection()
+
+            // After collection, trigger immediate sync to API
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                print("🔄 [TESTING] Triggering immediate screen time API sync")
+                let syncScheduler = ComposeApp.SendDataScheduler()
+                Task {
+                    do {
+                        let success = try await syncScheduler.performImmediateSync()
+                        if success.boolValue {
+                            print("✅ [TESTING] Screen time data synced to API successfully")
+                        } else {
+                            print("❌ [TESTING] Screen time sync to API failed")
+                        }
+                    } catch {
+                        print("❌ [TESTING] Screen time sync error: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        #endif
 
         // Schedule background health data sync
         HealthDataTaskScheduler.shared.scheduleBackgroundHealthSync()
@@ -44,6 +80,9 @@ struct iOSApp: App {
 
         // Schedule background screen time collection
         ScreenTimeTaskScheduler.shared.scheduleBackgroundScreentimeCollection()
+
+        // Schedule background data sync to API (every 15 minutes)
+        sendDataScheduler.scheduleScreentime()
     }
 
     /// Request HealthKit permissions when the app starts
