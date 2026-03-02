@@ -12,6 +12,7 @@ import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseWeeklySurvey
+import com.lemurs.lemurs_app.util.DemoMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -73,6 +74,16 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
     }
 
     suspend fun submitSurvey(onSurveySuccess: ((Int) -> Unit)? = null) {
+        // In demo mode, simulate successful survey submission with mock ID
+        if (DemoMode.isActive) {
+            logger.d("Demo mode: simulating successful weekly survey submission")
+            val mockSurveyResponseId = 99999 // Mock ID for demo mode
+            _currentSurveyResponseId.value = mockSurveyResponseId
+            _surveyAlreadySubmitted = true
+            onSurveySuccess?.invoke(mockSurveyResponseId)
+            return
+        }
+
         // Check if we already have an unsubmitted weekly survey in progress
         // This prevents creating duplicate entries when navigating between screens
         if (_surveyAlreadySubmitted && _currentSurveyResponseId.value != -1) {
@@ -288,6 +299,13 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
     }
     suspend fun submitAllWeeklyData() {
+        // In demo mode, simulate successful submission
+        if (DemoMode.isActive) {
+            logger.d("Demo mode: simulating successful weekly data submission")
+            resetSurveyState()
+            return
+        }
+
         if(appRepository.handleSurveyResponse()){
             logger.d { "All weekly data submitted successfully" }
             // Reset state for next weekly survey session
