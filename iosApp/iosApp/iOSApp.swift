@@ -116,11 +116,21 @@ struct iOSApp: App {
             return
         }
 
-        ScreenTimeTaskScheduler.shared.requestAuthorization { granted in
-            if granted {
-                print("✅ Screen Time authorization granted")
-            } else {
-                print("⚠️ Screen Time authorization denied or cancelled")
+        // Check if already authorized and start monitoring
+        if ScreenTimeTaskScheduler.shared.isAuthorizationGranted() {
+            print("✅ Screen Time already authorized")
+            if #available(iOS 16.0, *) {
+                // Start monitoring with the extension
+                ScreenTimeTaskScheduler.shared.requestAuthorization { _ in }
+            }
+        } else {
+            // Request authorization (will start monitoring on grant)
+            ScreenTimeTaskScheduler.shared.requestAuthorization { granted in
+                if granted {
+                    print("✅ Screen Time authorization granted")
+                } else {
+                    print("⚠️ Screen Time authorization denied or cancelled")
+                }
             }
         }
     }

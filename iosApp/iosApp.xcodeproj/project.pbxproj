@@ -7,10 +7,38 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		07E2DD1C2F55440F00A8D2EF /* DeviceActivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 07E2DD1B2F55440F00A8D2EF /* DeviceActivity.framework */; };
+		07E2DD252F55440F00A8D2EF /* ScreentimeExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 07E2DD1A2F55440F00A8D2EF /* ScreentimeExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A7E92A0B2222587CDD6531AA /* Pods_iosApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A777C2FF37AB4327BF60544C /* Pods_iosApp.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		07E2DD222F55440F00A8D2EF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD309731367C4C7D2D5F39B2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07E2DD192F55440F00A8D2EF;
+			remoteInfo = ScreentimeExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		07E2DD242F55440F00A8D2EF /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				07E2DD252F55440F00A8D2EF /* ScreentimeExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		07E2DD1A2F55440F00A8D2EF /* ScreentimeExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScreentimeExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		07E2DD1B2F55440F00A8D2EF /* DeviceActivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeviceActivity.framework; path = System/Library/Frameworks/DeviceActivity.framework; sourceTree = SDKROOT; };
 		42613FBCBF7447B723495CF8 /* LemursApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LemursApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		94B316211E3A408DCBBA56F8 /* Pods-iosApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iosApp.debug.xcconfig"; path = "Target Support Files/Pods-iosApp/Pods-iosApp.debug.xcconfig"; sourceTree = "<group>"; };
 		A777C2FF37AB4327BF60544C /* Pods_iosApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iosApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -18,6 +46,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		07E2DD292F55440F00A8D2EF /* Exceptions for "ScreentimeExtension" folder in "ScreentimeExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 07E2DD192F55440F00A8D2EF /* ScreentimeExtension */;
+		};
 		3CA5606339817E4406EF3682 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -29,6 +64,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		07E2DD1D2F55440F00A8D2EF /* ScreentimeExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				07E2DD292F55440F00A8D2EF /* Exceptions for "ScreentimeExtension" folder in "ScreentimeExtension" target */,
+			);
+			path = ScreentimeExtension;
+			sourceTree = "<group>";
+		};
 		71C37B47CE5E1208CE6DB814 /* iosApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -45,6 +88,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		07E2DD172F55440F00A8D2EF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				07E2DD1C2F55440F00A8D2EF /* DeviceActivity.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5E98AB7C8F869F80D025B3E3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -61,6 +112,7 @@
 			children = (
 				798319A8879A21C53D5895B4 /* Configuration */,
 				71C37B47CE5E1208CE6DB814 /* iosApp */,
+				07E2DD1D2F55440F00A8D2EF /* ScreentimeExtension */,
 				FEE8C2975FA10D31F795C019 /* Products */,
 				F5BE6C351CAF7ADE1F97BCC4 /* Pods */,
 				F22154AFA24EF7CA3D092A79 /* Frameworks */,
@@ -71,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				A777C2FF37AB4327BF60544C /* Pods_iosApp.framework */,
+				07E2DD1B2F55440F00A8D2EF /* DeviceActivity.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -88,6 +141,7 @@
 			isa = PBXGroup;
 			children = (
 				42613FBCBF7447B723495CF8 /* LemursApp.app */,
+				07E2DD1A2F55440F00A8D2EF /* ScreentimeExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +149,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		07E2DD192F55440F00A8D2EF /* ScreentimeExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 07E2DD282F55440F00A8D2EF /* Build configuration list for PBXNativeTarget "ScreentimeExtension" */;
+			buildPhases = (
+				07E2DD162F55440F00A8D2EF /* Sources */,
+				07E2DD172F55440F00A8D2EF /* Frameworks */,
+				07E2DD182F55440F00A8D2EF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				07E2DD1D2F55440F00A8D2EF /* ScreentimeExtension */,
+			);
+			name = ScreentimeExtension;
+			packageProductDependencies = (
+			);
+			productName = ScreentimeExtension;
+			productReference = 07E2DD1A2F55440F00A8D2EF /* ScreentimeExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		CE24FE44F6C7386D41B4A3B3 /* iosApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3FEAC3F79D36FC62D04F9875 /* Build configuration list for PBXNativeTarget "iosApp" */;
@@ -105,10 +181,12 @@
 				5E98AB7C8F869F80D025B3E3 /* Frameworks */,
 				61C3E1E98A00A3F670DDBC2F /* Resources */,
 				9DB06559A023CFE39F3F7425 /* [CP] Embed Pods Frameworks */,
+				07E2DD242F55440F00A8D2EF /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				07E2DD232F55440F00A8D2EF /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				71C37B47CE5E1208CE6DB814 /* iosApp */,
@@ -125,9 +203,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
+					07E2DD192F55440F00A8D2EF = {
+						CreatedOnToolsVersion = 16.3;
+					};
 					CE24FE44F6C7386D41B4A3B3 = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -148,11 +229,19 @@
 			projectRoot = "";
 			targets = (
 				CE24FE44F6C7386D41B4A3B3 /* iosApp */,
+				07E2DD192F55440F00A8D2EF /* ScreentimeExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		07E2DD182F55440F00A8D2EF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		61C3E1E98A00A3F670DDBC2F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -228,6 +317,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		07E2DD162F55440F00A8D2EF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CA72E1CB1FA3E6D4CEB0F6B2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -237,7 +333,72 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		07E2DD232F55440F00A8D2EF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07E2DD192F55440F00A8D2EF /* ScreentimeExtension */;
+			targetProxy = 07E2DD222F55440F00A8D2EF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		07E2DD262F55440F00A8D2EF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ScreentimeExtension/ScreentimeExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScreentimeExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScreentimeExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lemurs.v1.dev.ScreentimeExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		07E2DD272F55440F00A8D2EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ScreentimeExtension/ScreentimeExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = X9723G3J94;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ScreentimeExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ScreentimeExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lemurs.v1.ScreentimeExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		6267F406537D96E695C479AA /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = DB6EAB3572162AF58FD725D9 /* Pods-iosApp.release.xcconfig */;
@@ -441,6 +602,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		07E2DD282F55440F00A8D2EF /* Build configuration list for PBXNativeTarget "ScreentimeExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				07E2DD262F55440F00A8D2EF /* Debug */,
+				07E2DD272F55440F00A8D2EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		3FEAC3F79D36FC62D04F9875 /* Build configuration list for PBXNativeTarget "iosApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

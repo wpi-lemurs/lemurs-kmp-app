@@ -133,6 +133,14 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
             do {
                 try await center.requestAuthorization(for: .individual)
                 print("✅ Screen Time authorization granted")
+
+                // Start monitoring after authorization
+                if #available(iOS 16.0, *) {
+                    await MainActor.run {
+                        self.startDeviceActivityMonitoring()
+                    }
+                }
+
                 completion(true)
             } catch let error as NSError {
                 // Check for sandbox restriction error (code 4099 with error 159)
@@ -155,6 +163,62 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
         }
         #else
         completion(false)
+        #endif
+    }
+
+    // MARK: - DeviceActivity Monitoring
+
+    /// Start DeviceActivity monitoring with the extension
+    @available(iOS 16.0, *)
+    private func startDeviceActivityMonitoring() {
+        guard isFamilyControlsAvailable else {
+            print("❌ Cannot start monitoring - Family Controls not available")
+            return
+        }
+
+        #if canImport(DeviceActivity)
+        let center = DeviceActivityCenter()
+
+        // Create daily monitoring schedule
+        let schedule = DeviceActivitySchedule(
+            intervalStart: DateComponents(hour: 0, minute: 0),
+            intervalEnd: DateComponents(hour: 23, minute: 59),
+            repeats: true
+        )
+
+        // Create threshold events
+        let events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [
+            .init("usage_15min"): DeviceActivityEvent(
+                threshold: DateComponents(minute: 15)
+            ),
+            .init("usage_30min"): DeviceActivityEvent(
+                threshold: DateComponents(minute: 30)
+            ),
+            .init("usage_60min"): DeviceActivityEvent(
+                threshold: DateComponents(minute: 60)
+            )
+        ]
+
+        let activityName = DeviceActivityName("daily_monitoring")
+
+        do {
+            try center.startMonitoring(activityName, during: schedule, events: events)
+            print("✅ Started DeviceActivity monitoring with extension")
+            print("ℹ️  Extension will log threshold events to shared container")
+        } catch {
+            print("❌ Failed to start monitoring: \(error)")
+        }
+        #endif
+    }
+
+    /// Stop DeviceActivity monitoring
+    @available(iOS 16.0, *)
+    @objc public func stopMonitoring() {
+        #if canImport(DeviceActivity)
+        let center = DeviceActivityCenter()
+        let activityName = DeviceActivityName("daily_monitoring")
+        center.stopMonitoring([activityName])
+        print("🛑 Stopped DeviceActivity monitoring")
         #endif
     }
 
@@ -322,16 +386,9 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
     }
 
     /// Get usage statistics for the specified time range.
-    /// On iOS, this requires DeviceActivity framework (iOS 15+) which has significant limitations.
-    /// For now, returns empty list as iOS Screen Time API is heavily restricted.
+    /// Reads data collected by the DeviceActivityMonitor extension from shared container.
     @objc public func getUsageStats(startTimeMillis: Int64, endTimeMillis: Int64) -> [Screentime] {
         print("📊 Kotlin requested screen time data from \(startTimeMillis) to \(endTimeMillis)")
-
-        // iOS Screen Time API (DeviceActivity) limitations:
-        // 1. Requires iOS 15.0+
-        // 2. Can only display data in SwiftUI views (DeviceActivityReport)
-        // 3. Cannot directly query or export usage data programmatically
-        // 4. Much more restricted than Android's UsageStatsManager
 
         guard #available(iOS 15.0, *) else {
             print("⚠️ Screen Time API requires iOS 15.0+")
@@ -344,27 +401,106 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
             return []
         }
 
-        // TODO: iOS Screen Time data collection is severely limited
-        // The DeviceActivityReport framework requires:
-        // 1. SwiftUI views to display data (cannot access raw data)
-        // 2. Extension-based architecture
-        // 3. No direct programmatic access to usage statistics
-        //
-        // Alternative approaches:
-        // 1. Use DeviceActivityMonitor to track intervals (limited data)
-        // 2. Request user to manually share Screen Time data
-        // 3. Use alternative methods (app lifecycle tracking)
+        // Read events from shared container written by extension
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.lemurs.lemurs-app"
+        ) else {
+            print("❌ Failed to access shared container")
+            return []
+        }
 
-        print("⚠️ iOS Screen Time data collection not fully implemented due to API limitations")
-        print("ℹ️  iOS DeviceActivity API does not allow programmatic access to app usage data")
-        print("ℹ️  Data must be displayed in SwiftUI DeviceActivityReport views only")
+        let fileURL = containerURL.appendingPathComponent("screentime_events.json")
 
-        // Return empty list for now
-        // In a real implementation, you might:
-        // - Track app lifecycle events
-        // - Use DeviceActivityMonitor for basic interval tracking
-        // - Implement a custom tracking solution
-        return []
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("ℹ️  No screen time events file found yet")
+            return []
+        }
+
+        do {
+            let data = try Data(contentsOf: fileURL)
+            guard let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                print("⚠️ Invalid events format")
+                return []
+            }
+
+            print("📊 Found \(events.count) total events in extension storage")
+
+            // Filter events by time range
+            let startTime = Double(startTimeMillis) / 1000.0
+            let endTime = Double(endTimeMillis) / 1000.0
+
+            let filteredEvents = events.filter { event in
+                guard let timestamp = event["timestamp"] as? Double else { return false }
+                return timestamp >= startTime && timestamp <= endTime
+            }
+
+            print("📊 Found \(filteredEvents.count) events in requested time range")
+
+            // Convert events to Screentime objects
+            return convertEventsToScreentime(filteredEvents, startTime: startTime, endTime: endTime)
+
+        } catch {
+            print("❌ Failed to read events: \(error)")
+            return []
+        }
+    }
+
+    private func convertEventsToScreentime(_ events: [[String: Any]], startTime: Double, endTime: Double) -> [Screentime] {
+        var result: [Screentime] = []
+
+        // Group events by activity
+        var activityDurations: [String: Double] = [:]
+        var activityLastSeen: [String: Double] = [:]
+
+        for event in events {
+            guard let type = event["type"] as? String,
+                  let activity = event["activity"] as? String,
+                  let timestamp = event["timestamp"] as? Double else {
+                continue
+            }
+
+            activityLastSeen[activity] = max(activityLastSeen[activity] ?? 0, timestamp)
+
+            // Estimate duration based on threshold events
+            if type == "threshold_reached" {
+                if let eventName = event["event"] as? String {
+                    // Parse duration from event name (e.g., "usage_15min" = 15 minutes)
+                    if eventName.contains("15min") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (15 * 60)
+                    } else if eventName.contains("30min") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (30 * 60)
+                    } else if eventName.contains("60min") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (60 * 60)
+                    }
+                }
+            }
+        }
+
+        // Create Screentime entries
+        for (activity, duration) in activityDurations where duration > 0 {
+            let lastUsed = activityLastSeen[activity] ?? endTime
+
+            let screentime = Screentime(
+                date: String(Int64(Date().timeIntervalSince1970 * 1000)),
+                startTime: formatDate(startTime),
+                endTime: formatDate(endTime),
+                appName: activity,
+                totalTime: Int64(duration * 1000), // Convert to milliseconds
+                lastTimeUsed: formatDate(lastUsed)
+            )
+
+            result.append(screentime)
+        }
+
+        print("📊 Converted to \(result.count) Screentime entries")
+        return result
+    }
+
+    private func formatDate(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
     }
 
     /// Check if Screen Time authorization is granted.
