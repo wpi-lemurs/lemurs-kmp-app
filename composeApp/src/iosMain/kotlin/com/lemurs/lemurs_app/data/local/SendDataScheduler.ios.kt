@@ -93,12 +93,12 @@ actual class SendDataScheduler : KoinComponent {
     actual fun scheduleScreentime() {
         val request = BGAppRefreshTaskRequest(screentimeTaskIdentifier)
 
-        // FOR TESTING: Run after 2 minutes (change back to 15 for production)
-        request.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(2.0 * 60.0)
+        // Run after 15 minutes
+        request.earliestBeginDate = NSDate.dateWithTimeIntervalSinceNow(15.0 * 60.0)
 
         try {
             BGTaskScheduler.sharedScheduler.submitTaskRequest(request, null)
-            logger.i("Scheduled screen time sync for ~2 minutes from now (TESTING)")
+            logger.i("Scheduled screen time sync for ~15 minutes from now")
         } catch (e: Exception) {
             logger.e("Failed to schedule screen time sync: ${e.message}")
         }

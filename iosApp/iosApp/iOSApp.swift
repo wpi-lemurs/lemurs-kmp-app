@@ -26,10 +26,6 @@ struct iOSApp: App {
         // This also registers background tasks with BGTaskScheduler
         registerScreenTimeSchedulerWithKotlin()
 
-        // Initialize ScreenTimeTracker to start tracking own app usage
-        _ = ScreenTimeTracker.shared
-        print("✅ ScreenTimeTracker initialized - tracking own app usage")
-
         // Initialize Koin for dependency injection
         MainViewControllerKt.doInitKoin()
 
@@ -47,7 +43,7 @@ struct iOSApp: App {
         // FOR TESTING: Trigger immediate screen time collection after a short delay
         // This ensures we collect data right away instead of waiting for background tasks
         #if DEBUG
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        func triggerCollectionAndSync() {
             print("🔄 [TESTING] Triggering immediate screen time collection")
             ScreenTimeTaskScheduler.shared.performImmediateCollection()
 
@@ -61,13 +57,24 @@ struct iOSApp: App {
                         if success.boolValue {
                             print("✅ [TESTING] Screen time data synced to API successfully")
                         } else {
-                            print("❌ [TESTING] Screen time sync to API failed")
+                            print("❌ [TESTING] Screen time sync to API failed - possibly no new data")
+                        }
+
+                        // Schedule next collection-sync cycle in 2 minutes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 120.0) {
+                            print("🔄 [TESTING] Starting next collection-sync cycle")
+                            triggerCollectionAndSync()
                         }
                     } catch {
                         print("❌ [TESTING] Screen time sync error: \(error.localizedDescription)")
                     }
                 }
             }
+        }
+
+        // Start the first collection-sync cycle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            triggerCollectionAndSync()
         }
         #endif
 
@@ -159,14 +166,37 @@ struct iOSApp: App {
         if ScreenTimeTaskScheduler.shared.isAuthorizationGranted() {
             print("✅ Screen Time already authorized")
             if #available(iOS 16.0, *) {
-                // Start monitoring with the extension
+                // Start monitoring with the extension (only if not already active)
                 ScreenTimeTaskScheduler.shared.requestAuthorization { _ in }
+
+                // Only show app selection if:
+                // 1. User hasn't completed selection yet, AND
+                // 2. Monitoring is NOT already active from previous session
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    let hasCompletedSelection = ScreenTimeTaskScheduler.shared.hasCompletedAppSelection()
+                    let isMonitoringActive = UserDefaults.standard.bool(forKey: "deviceactivity_monitoring_started")
+
+                    if !hasCompletedSelection && !isMonitoringActive {
+                        print("📱 First time setup - prompting for app selection...")
+                        AppSelectionCoordinator.shared.presentAppSelection()
+                    } else if hasCompletedSelection {
+                        print("ℹ️ App selection already completed - monitoring persists from previous session")
+                    }
+                }
             }
         } else {
             // Request authorization (will start monitoring on grant)
             ScreenTimeTaskScheduler.shared.requestAuthorization { granted in
                 if granted {
                     print("✅ Screen Time authorization granted")
+
+                    // After authorization, prompt for app selection (first time only)
+                    if #available(iOS 16.0, *) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            print("📱 Prompting for app selection after authorization...")
+                            AppSelectionCoordinator.shared.presentAppSelection()
+                        }
+                    }
                 } else {
                     print("⚠️ Screen Time authorization denied or cancelled")
                 }

@@ -176,39 +176,144 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
             return
         }
 
-        #if canImport(DeviceActivity)
+        #if canImport(DeviceActivity) && canImport(FamilyControls)
         let center = DeviceActivityCenter()
 
-        // Create daily monitoring schedule
+        print("📊 Setting up DeviceActivity monitoring for TestFlight")
+        print("ℹ️  This build uses aggressive data collection suitable for TestFlight only")
+
+        // Check if monitoring is already active from previous launch
+        if isMonitoringAlreadyActive() {
+            let appCount = UserDefaults.standard.integer(forKey: "screentime_app_selection_count")
+            print("✅ DeviceActivity monitoring already active from previous session")
+            print("ℹ️  Monitoring persists: \(appCount) app(s) selected previously")
+            print("ℹ️  Threshold and interval monitoring continue across app launches")
+            print("ℹ️  No need to restart monitoring - sessions are persistent")
+
+            // Create shared container file if needed
+            createSharedContainerFileIfNeeded()
+            return
+        }
+
+        print("ℹ️  Starting initial DeviceActivity monitoring setup")
+        print("ℹ️  User should select apps via app picker to enable threshold tracking")
+
+        // Note: FamilyActivitySelection cannot be persisted across app launches
+        // It's session-based only. But once monitoring is started, it persists!
+        let selection = FamilyActivitySelection()
+
+        // Create monitoring schedule (midnight to midnight)
         let schedule = DeviceActivitySchedule(
             intervalStart: DateComponents(hour: 0, minute: 0),
             intervalEnd: DateComponents(hour: 23, minute: 59),
             repeats: true
         )
 
-        // Create threshold events
+        // Create threshold events that will fire when user reaches usage thresholds
+        // These track TOTAL usage across all apps (if we can get all app tokens)
         let events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [
+            .init("usage_5min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 5)
+            ),
             .init("usage_15min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
                 threshold: DateComponents(minute: 15)
             ),
             .init("usage_30min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
                 threshold: DateComponents(minute: 30)
             ),
             .init("usage_60min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
                 threshold: DateComponents(minute: 60)
+            ),
+            .init("usage_120min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 120)
+            ),
+            .init("usage_240min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 240)
             )
         ]
 
-        let activityName = DeviceActivityName("daily_monitoring")
+        let activityName = DeviceActivityName("daily_all_apps")
 
         do {
             try center.startMonitoring(activityName, during: schedule, events: events)
-            print("✅ Started DeviceActivity monitoring with extension")
-            print("ℹ️  Extension will log threshold events to shared container")
+            print("✅ Started comprehensive DeviceActivity monitoring")
+
+            if selection.applicationTokens.isEmpty {
+                print("⚠️  No app tokens available - threshold events won't fire")
+                print("ℹ️  User needs to select apps in Settings or via app picker")
+            } else {
+                print("✅ Monitoring \(selection.applicationTokens.count) app(s)")
+                print("ℹ️  Threshold events will fire at: 5min, 15min, 30min, 1hr, 2hr, 4hr")
+            }
         } catch {
-            print("❌ Failed to start monitoring: \(error)")
+            print("❌ Failed to start comprehensive monitoring: \(error.localizedDescription)")
         }
+
+        // ALSO set up 4 six-hour intervals as fallback
+        // iOS limits: Maximum ~5-6 concurrent DeviceActivity sessions
+        print("📊 Setting up 4 six-hour interval monitoring as fallback...")
+
+        let intervals: [(String, DateComponents, DateComponents)] = [
+            ("interval_night", DateComponents(hour: 0, minute: 0), DateComponents(hour: 6, minute: 0)),
+            ("interval_morning", DateComponents(hour: 6, minute: 0), DateComponents(hour: 12, minute: 0)),
+            ("interval_afternoon", DateComponents(hour: 12, minute: 0), DateComponents(hour: 18, minute: 0)),
+            ("interval_evening", DateComponents(hour: 18, minute: 0), DateComponents(hour: 23, minute: 59))
+        ]
+
+        for (name, start, end) in intervals {
+            let schedule = DeviceActivitySchedule(
+                intervalStart: start,
+                intervalEnd: end,
+                repeats: true
+            )
+
+            let activityName = DeviceActivityName(name)
+
+            do {
+                try center.startMonitoring(activityName, during: schedule)
+                print("✅ Started interval: \(name) (\(start.hour!):00-\(end.hour!):\(end.minute ?? 0))")
+            } catch {
+                print("❌ Failed to start monitoring \(name): \(error.localizedDescription)")
+            }
+        }
+
+        print("✅ DeviceActivity monitoring configured:")
+        print("   • Threshold-based monitoring (requires app selection)")
+        print("   • 4 six-hour intervals (always works)")
+        print("   • Total activities: 5 (within iOS limit)")
+        print("   • Interval callbacks: 4x per day at 6 AM, Noon, 6 PM, Midnight")
+
+        // Mark monitoring as started so we don't restart on next launch
+        markMonitoringAsStarted()
+
+        // Create shared container file to verify it works
+        createSharedContainerFileIfNeeded()
+
         #endif
+    }
+
+    /// Check if monitoring is already active from a previous session
+    /// Once started, DeviceActivity monitoring persists across app launches until explicitly stopped
+    private func isMonitoringAlreadyActive() -> Bool {
+        // Check if we've ever started monitoring
+        let hasStartedMonitoring = UserDefaults.standard.bool(forKey: "deviceactivity_monitoring_started")
+
+        // Check if user has completed app selection
+        let hasCompletedSelection = hasCompletedAppSelection()
+
+        return hasStartedMonitoring && hasCompletedSelection
+    }
+
+    /// Mark that monitoring has been started (persists across launches)
+    private func markMonitoringAsStarted() {
+        UserDefaults.standard.set(true, forKey: "deviceactivity_monitoring_started")
+        print("✅ Marked monitoring as started - will persist across app launches")
     }
 
     /// Stop DeviceActivity monitoring
@@ -216,9 +321,180 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
     @objc public func stopMonitoring() {
         #if canImport(DeviceActivity)
         let center = DeviceActivityCenter()
-        let activityName = DeviceActivityName("daily_monitoring")
-        center.stopMonitoring([activityName])
-        print("🛑 Stopped DeviceActivity monitoring")
+
+        // Stop threshold monitoring
+        center.stopMonitoring([DeviceActivityName("daily_all_apps")])
+
+        // Stop 4 six-hour interval monitoring sessions
+        let intervalNames = ["interval_night", "interval_morning", "interval_afternoon", "interval_evening"]
+        let activities = intervalNames.map { DeviceActivityName($0) }
+
+        center.stopMonitoring(activities)
+
+        // Clear the monitoring started flag
+        UserDefaults.standard.set(false, forKey: "deviceactivity_monitoring_started")
+
+        print("🛑 Stopped all DeviceActivity monitoring (5 activities)")
+        #else
+        print("⚠️ DeviceActivity not available")
+        #endif
+    }
+
+    /// Apply saved app selection and restart monitoring with selected apps
+    @available(iOS 16.0, *)
+    public func applyAppSelection(_ selection: FamilyActivitySelection) {
+        guard isFamilyControlsAvailable else {
+            print("❌ Cannot apply app selection - Family Controls not available")
+            return
+        }
+
+        #if canImport(DeviceActivity) && canImport(FamilyControls)
+        print("📱 Applying app selection with \(selection.applicationTokens.count) app(s)")
+
+        // DON'T stop monitoring - just update it
+        // DeviceActivity sessions persist across launches, so we update not restart
+        let center = DeviceActivityCenter()
+
+        // 1. Set up threshold monitoring with selected apps
+        let schedule = DeviceActivitySchedule(
+            intervalStart: DateComponents(hour: 0, minute: 0),
+            intervalEnd: DateComponents(hour: 23, minute: 59),
+            repeats: true
+        )
+
+        let events: [DeviceActivityEvent.Name: DeviceActivityEvent] = [
+            .init("usage_5min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 5)
+            ),
+            .init("usage_15min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 15)
+            ),
+            .init("usage_30min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 30)
+            ),
+            .init("usage_60min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 60)
+            ),
+            .init("usage_120min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 120)
+            ),
+            .init("usage_240min"): DeviceActivityEvent(
+                applications: selection.applicationTokens,
+                threshold: DateComponents(minute: 240)
+            )
+        ]
+
+        let activityName = DeviceActivityName("daily_all_apps")
+
+        do {
+            try center.startMonitoring(activityName, during: schedule, events: events)
+            print("✅ Threshold monitoring started with \(selection.applicationTokens.count) app(s)")
+            print("✅ Thresholds: 5min, 15min, 30min, 1hr, 2hr, 4hr")
+        } catch {
+            print("❌ Failed to start threshold monitoring: \(error.localizedDescription)")
+        }
+
+        // 2. ALSO set up 4 six-hour intervals as fallback
+        // iOS limits: Maximum ~5-6 concurrent DeviceActivity sessions
+        // We use 1 for thresholds + 4 for intervals = 5 total (safe)
+        print("📊 Setting up 4 six-hour interval monitoring (iOS activity limit workaround)...")
+
+        let intervals: [(String, DateComponents, DateComponents)] = [
+            ("interval_night", DateComponents(hour: 0, minute: 0), DateComponents(hour: 6, minute: 0)),
+            ("interval_morning", DateComponents(hour: 6, minute: 0), DateComponents(hour: 12, minute: 0)),
+            ("interval_afternoon", DateComponents(hour: 12, minute: 0), DateComponents(hour: 18, minute: 0)),
+            ("interval_evening", DateComponents(hour: 18, minute: 0), DateComponents(hour: 23, minute: 59))
+        ]
+
+        for (name, start, end) in intervals {
+            let intervalSchedule = DeviceActivitySchedule(
+                intervalStart: start,
+                intervalEnd: end,
+                repeats: true
+            )
+
+            let intervalActivity = DeviceActivityName(name)
+
+            do {
+                try center.startMonitoring(intervalActivity, during: intervalSchedule)
+                print("✅ Started interval: \(name) (\(start.hour!):00-\(end.hour!):\(end.minute ?? 0))")
+            } catch {
+                print("❌ Failed to start interval \(name): \(error.localizedDescription)")
+            }
+        }
+
+        print("✅ Complete monitoring configured:")
+        print("   • Threshold monitoring: \(selection.applicationTokens.count) apps")
+        print("   • Six-hour intervals: 4 intervals per day")
+        print("   • Total activities: 5 (within iOS limit)")
+        print("   • Extension will fire 4x per day at: 6 AM, Noon, 6 PM, Midnight")
+
+        // Mark monitoring as started so it persists across app launches
+        markMonitoringAsStarted()
+
+        // Create shared container file from main app to verify it works
+        createSharedContainerFileIfNeeded()
+
+        #endif
+    }
+
+    /// Create the shared container file if it doesn't exist
+    /// This verifies shared container access works before extension fires
+    private func createSharedContainerFileIfNeeded() {
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.com.lemurs.lemurs-app"
+        ) else {
+            print("❌ [Main App] Failed to access shared container")
+            return
+        }
+
+        let fileURL = containerURL.appendingPathComponent("screentime_events.json")
+        print("📂 [Main App] Shared container path: \(fileURL.path)")
+
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            print("✅ [Main App] Shared container file already exists")
+        } else {
+            // Create empty array file
+            let emptyArray: [[String: Any]] = []
+            do {
+                let data = try JSONSerialization.data(withJSONObject: emptyArray, options: .prettyPrinted)
+                try data.write(to: fileURL, options: .atomic)
+                print("✅ [Main App] Created shared container file for extension")
+                print("ℹ️  Extension will add events to this file when callbacks fire")
+            } catch {
+                print("❌ [Main App] Failed to create shared container file: \(error)")
+            }
+        }
+    }
+
+    /// Check if user has completed app selection
+    @objc public func hasCompletedAppSelection() -> Bool {
+        return UserDefaults.standard.bool(forKey: "screentime_app_selection_completed")
+    }
+
+    /// Load saved app selection from UserDefaults
+    @available(iOS 16.0, *)
+    public func loadSavedAppSelection() -> FamilyActivitySelection? {
+        #if canImport(FamilyControls)
+        guard let data = UserDefaults.standard.data(forKey: "screentime_app_selection") else {
+            return nil
+        }
+
+        do {
+            let selection = try JSONDecoder().decode(FamilyActivitySelection.self, from: data)
+            print("📱 Loaded saved selection: \(selection.applicationTokens.count) app(s)")
+            return selection
+        } catch {
+            print("❌ Failed to load saved selection: \(error)")
+            return nil
+        }
+        #else
+        return nil
         #endif
     }
 
@@ -233,12 +509,12 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
 
         let request = BGAppRefreshTaskRequest(identifier: screentimeTaskIdentifier)
 
-        // FOR TESTING: Run after 2 minutes (change back to 15 for production)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 60)
+        // FOR TESTING: Run after 15 minutes
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("✅ Scheduled background screen time collection for ~2 minutes from now (TESTING)")
+            print("✅ Scheduled background screen time collection for ~15 minutes from now")
         } catch BGTaskScheduler.Error.notPermitted {
             print("❌ BGTaskScheduler: Task not permitted - check Info.plist BGTaskSchedulerPermittedIdentifiers")
         } catch BGTaskScheduler.Error.tooManyPendingTaskRequests {
@@ -289,6 +565,10 @@ private let screentimeTaskIdentifier = "com.lemurs.lemurs_app.screentimeCollecti
         print("🔄 Performing immediate screen time collection")
         performScreentimeCollection { success in
             print(success ? "✅ Immediate screen time collection completed" : "❌ Immediate screen time collection failed")
+
+            // Schedule the next collection to ensure continuous data gathering
+            self.scheduleBackgroundScreentimeCollection()
+            print("🔄 Scheduled next collection for ~2 minutes from now")
         }
     }
 
@@ -409,11 +689,16 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
         }
 
         let fileURL = containerURL.appendingPathComponent("screentime_events.json")
+        print("📂 Checking for extension data at: \(fileURL.path)")
 
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             print("ℹ️  No screen time events file found yet")
             print("ℹ️  DeviceActivityMonitor extension hasn't logged any events")
-            print("ℹ️  Extension triggers at: interval boundaries (midnight) or thresholds (15/30/60 min)")
+            print("ℹ️  Possible reasons:")
+            print("     • Not enough time has passed (thresholds: 5/15/30/60/120/240 min)")
+            print("     • User hasn't used the selected apps enough")
+            print("     • Extension hasn't been triggered by iOS yet")
+            print("     • Hourly intervals won't fire until top of next hour")
             print("🔄 Using fallback: tracking own app usage via lifecycle")
             return getFallbackUsageData(startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
         }
@@ -426,6 +711,11 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
             }
 
             print("📊 Found \(events.count) total events in extension storage")
+
+            // Log what types of events we have
+            let eventTypes = events.compactMap { $0["type"] as? String }
+            let typeCounts = Dictionary(grouping: eventTypes, by: { $0 }).mapValues { $0.count }
+            print("📊 Event types: \(typeCounts)")
 
             // Filter events by time range
             let startTime = Double(startTimeMillis) / 1000.0
@@ -444,7 +734,9 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
             }
 
             // Convert events to Screentime objects
-            return convertEventsToScreentime(filteredEvents, startTime: startTime, endTime: endTime)
+            let screentimeData = convertEventsToScreentime(filteredEvents, startTime: startTime, endTime: endTime)
+            print("✅ Returning \(screentimeData.count) Screentime entries from extension data")
+            return screentimeData
 
         } catch {
             print("❌ Failed to read events: \(error)")
@@ -454,6 +746,13 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
 
     /// Fallback to own app usage tracking when extension data is not available
     private func getFallbackUsageData(startTimeMillis: Int64, endTimeMillis: Int64) -> [Screentime] {
+        // ScreenTimeTracker disabled - only using extension data
+        print("ℹ️ No extension data available")
+        print("ℹ️ ScreenTimeTracker disabled - returning empty data")
+        print("ℹ️ Waiting for extension to log threshold or interval events")
+        return []
+
+        /* DISABLED - ScreenTimeTracker that only tracks own app
         let tracker = ScreenTimeTracker.shared
         let ownAppData = tracker.getOwnAppUsage(
             startTimeMillis: startTimeMillis,
@@ -467,6 +766,7 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
         }
 
         return ownAppData
+        */
     }
 
     private func convertEventsToScreentime(_ events: [[String: Any]], startTime: Double, endTime: Double) -> [Screentime] {
@@ -485,16 +785,26 @@ extension ScreenTimeSchedulerBridgeAdapter: IOSScreenTimeSchedulerBridge {
 
             activityLastSeen[activity] = max(activityLastSeen[activity] ?? 0, timestamp)
 
-            // Estimate duration based on threshold events
+            // Get actual duration from threshold events
             if type == "threshold_reached" {
-                if let eventName = event["event"] as? String {
-                    // Parse duration from event name (e.g., "usage_15min" = 15 minutes)
-                    if eventName.contains("15min") {
+                // Use actual duration if provided by extension
+                if let durationSeconds = event["durationSeconds"] as? Double {
+                    activityDurations[activity] = (activityDurations[activity] ?? 0) + durationSeconds
+                    print("📊 Using actual duration: \(durationSeconds / 60) minutes")
+                } else if let eventName = event["event"] as? String {
+                    // Fallback: estimate duration from event name
+                    if eventName.contains("5min") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (5 * 60)
+                    } else if eventName.contains("15min") {
                         activityDurations[activity] = (activityDurations[activity] ?? 0) + (15 * 60)
                     } else if eventName.contains("30min") {
                         activityDurations[activity] = (activityDurations[activity] ?? 0) + (30 * 60)
-                    } else if eventName.contains("60min") {
+                    } else if eventName.contains("60min") || eventName.contains("1hr") {
                         activityDurations[activity] = (activityDurations[activity] ?? 0) + (60 * 60)
+                    } else if eventName.contains("120min") || eventName.contains("2hr") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (120 * 60)
+                    } else if eventName.contains("240min") || eventName.contains("4hr") {
+                        activityDurations[activity] = (activityDurations[activity] ?? 0) + (240 * 60)
                     }
                 }
             }
