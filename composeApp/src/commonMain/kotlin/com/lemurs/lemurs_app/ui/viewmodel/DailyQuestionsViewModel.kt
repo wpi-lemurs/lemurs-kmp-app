@@ -15,6 +15,7 @@ import com.lemurs.lemurs_app.survey.SurveySubmission
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseDailySurvey
 import com.lemurs.lemurs_app.survey.postDailySurvey
+import com.lemurs.lemurs_app.util.DemoMode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,12 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
     }
 
     suspend fun submitSurvey() {
+        // In demo mode, simulate successful survey submission
+        if (DemoMode.isActive) {
+            logger.d("Demo mode: simulating successful daily survey submission")
+            return
+        }
+
         val now = Clock.System.now()
         val completedSurveys = ArrayList<CompletedSurveys>()
         for (surveyId in surveyAnswers.value.keys) {
