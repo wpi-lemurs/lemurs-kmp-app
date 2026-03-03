@@ -1,7 +1,7 @@
 # LEMURS Mobile App
 
 > For detailed setup, architecture, and development instructions, see [INSTRUCTIONS.md](./INSTRUCTIONS.md)
-
+## Our Google Drive contains all Notes, Presentations, and Documentation: [2025-2026 MQP Google Drive](https://drive.google.com/drive/folders/1PFaBWZVu76Fuua1n1oA8xVNiKvnFAPAL?usp=sharing_)
 This is a Kotlin Multiplatform project targeting Android, iOS.
 
 * [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
