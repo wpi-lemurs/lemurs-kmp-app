@@ -475,12 +475,13 @@ Test-multiplatform-mobile/
 9. Then follow the instructions at the following link to update the deployed version: [Deploy new apk](https://github.com/wpi-lemurs/lemurs-api/blob/main/INSTRUCTION.md#how-to-deploy-new-release-apk-to-production-server-and-update-download-link)
 
 # Creating release builds for iOS
-## Additional documation here:  [iOS Archives, TestFlight, App Store Review](https://docs.google.com/document/d/1ysggQhGhi7HLjyIU71ETcorsgIFGWM3wyHwDmES7HQc/edit?tab=t.0#heading=h.nsozuuftronp)
+## Additional documentation here:  [iOS Archives, TestFlight, App Store Review](https://docs.google.com/document/d/1ysggQhGhi7HLjyIU71ETcorsgIFGWM3wyHwDmES7HQc/edit?tab=t.0#heading=h.nsozuuftronp)
 
-2. Open the `iosApp/` directory in Xcode.
-2. Ensure you are signed into an apple id account with Developer access
+1. Open the `iosApp/` directory in Xcode.
+2. Ensure you are signed into an Apple ID account with Developer/App Manager access to WPI Organization
 3. In the topbar, select Product/Archive
-4. Once the build completes, upload to your preferred platform. We use Testflight
+4. Once the build completes, upload to App Store Connect
+5. Read the documentation for more details
 
 ## Additional Resources
 
