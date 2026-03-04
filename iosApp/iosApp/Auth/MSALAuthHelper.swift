@@ -46,8 +46,13 @@ import MSAL
                 authority: authorityURL
             )
 
+            // Configure keychain access group for token persistence across app launches
+            // This uses the standard Microsoft ADAL cache keychain group
+            config.cacheConfig.keychainSharingGroup = "com.microsoft.adalcache"
+
             // Log the actual redirect URI that will be used
             print("MSAL Debug: Configured redirect URI = \(config.redirectUri ?? "nil (auto-generated)")")
+            print("MSAL Debug: Keychain sharing group = \(config.cacheConfig.keychainSharingGroup ?? "nil")")
 
             application = try MSALPublicClientApplication(configuration: config)
 
