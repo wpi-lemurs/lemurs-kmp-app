@@ -3,10 +3,8 @@ package com.lemurs.lemurs_app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +50,7 @@ import com.lemurs.lemurs_app.ui.screens.WeeklyInformationScreen
 import com.lemurs.lemurs_app.ui.screens.WeeklyQuestionsScreen
 import com.lemurs.lemurs_app.ui.screens.WritingScreen
 import com.lemurs.lemurs_app.ui.navigation.AppNavigator
+import com.lemurs.lemurs_app.ui.navigation.swipeBack
 import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
 import com.lemurs.lemurs_app.ui.viewmodel.DemographicsViewModel
 import kotlinx.coroutines.launch
@@ -169,11 +168,20 @@ fun App(navigator: AppNavigator) {
                 },
                 modifier = Modifier.fillMaxSize()
             ) { innerPadding ->
-                Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .swipeBack(
+                            enabled = navigator.canGoBack() && drawerState.currentValue == DrawerValue.Closed,
+                            edgeOnly = true,
+                            onBack = navigator::goBack
+                        )
+                ) {
                     NavigationComponent(
                         navigator = navigator,
                         currentRoute = navigator.currentDestination,
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier
                     )
                 }
             }
