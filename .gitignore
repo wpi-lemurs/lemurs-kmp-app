@@ -17,3 +17,10 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Keystore files
+*.jks
+*.keystore
+debug.keystore
+upload-keystore.jks
+
