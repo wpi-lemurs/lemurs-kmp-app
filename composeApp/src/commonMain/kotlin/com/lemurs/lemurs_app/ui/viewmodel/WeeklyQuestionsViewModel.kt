@@ -127,6 +127,7 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
                 // Get provisionally a survey response ID
                 // Negative ID indicates a pending submission (not yet submitted to server)
                 setCurrentSurveyResponseId(-1 * completedSurvey.id)
+                _surveyAlreadySubmitted = true
                 // NOTE: Don't schedule background worker here - submitAllWeeklyData() will handle
                 // the immediate submission, and only schedule a retry worker if that fails.
                 onSurveySuccess?.invoke(-1 * completedSurvey.id)
@@ -179,7 +180,17 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
 
     suspend fun executeRequests() {
         if (_requestStack1.value.isEmpty()) {
-            logger.d { "No requests to execute" }
+            // Still persist weekly survey answers so skip paths can submit later.
+            if (_surveyAlreadySubmitted && _currentSurveyResponseId.value != -1) {
+                logger.d { "No requests to execute; survey already submitted with surveyResponseId: ${_currentSurveyResponseId.value}" }
+                return
+            }
+
+            logger.d { "No requests to execute; submitting survey only" }
+            submitSurvey { surveyResponseId ->
+                _surveyAlreadySubmitted = true
+                logger.d { "Survey-only submission completed with surveyResponseId: $surveyResponseId" }
+            }
             return
         }
 

@@ -16,8 +16,8 @@ import kotlinx.coroutines.delay
 fun CountdownTimer(totalSeconds: Long): Boolean {
     var timeLeft by remember { mutableStateOf(totalSeconds) }
 
-    // Handle debug mode case where totalSeconds is negative (indicates survey is available)
-    if (totalSeconds < 0L) {
+    // Handle cases where totalSeconds is zero or negative (already available / debug mode)
+    if (totalSeconds <= 0L) {
         return true
     }
 
