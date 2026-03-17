@@ -57,6 +57,9 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
 
     LaunchedEffect(Unit) {
         progressViewModel.newRefreshProgress()
+        surveyAvailabilityViewModel.clearAvailabilityCache()
+        surveyAvailabilityViewModel.refreshAvailability()
+        logger.w("Launched Effect called ${surveyAvailabilityViewModel.getAvailability()}" )
 
         // Enable debug mode for testing - allows taking surveys multiple times
         // Comment out this line when not testing
@@ -68,9 +71,15 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
         // Only run on iOS
         if (getPlatform().name.lowercase().contains("ios")) {
             val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
-            if (nextWeeklySurvey != null) {
+            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
+            // Only schedule if availability is loaded AND the survey is closed (future date).
+            // When timeUntilWeekly is null (cache not yet loaded) or negative (currently open),
+            // skip — a subsequent recompose with fresh data will schedule correctly.
+            if (nextWeeklySurvey != null && timeUntilWeekly != null && timeUntilWeekly > 0) {
                 scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
                 logger.w { "Scheduled weekly survey notification for $nextWeeklySurvey" }
+            } else {
+                logger.w { "Skipping notification scheduling (timeUntilWeekly=$timeUntilWeekly)" }
             }
         }
     }
@@ -96,6 +105,7 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
             }
 
             val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
+            logger.w { "(MainScreen) Weekly timeUntil: $timeUntilWeekly from availability=${surveyAvailabilityViewModel.getAvailability()}" }
             Text(
                 text = "Weekly Survey",
                 style = MaterialTheme.typography.titleLarge,
@@ -151,6 +161,5 @@ fun PreviewMainScreen(){
         // I create a navigator class called AppNavigator
         // This is just a preview, no actual navigation needed here.
         MainScreen(onNavigateTo = {})
-
     }
 }

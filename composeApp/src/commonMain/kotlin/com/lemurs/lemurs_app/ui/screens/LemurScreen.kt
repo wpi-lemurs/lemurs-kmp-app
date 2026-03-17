@@ -69,6 +69,7 @@ import com.lemurs.lemurs_app.ui.theme.LemurWhite
 import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
 import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SubmissionViewModel
+import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.WeeklyQuestionsViewModel
 import com.lemurs.lemurs_app.util.formatTwoDecimals
 //import lemurs_app.shared.generated.resources.Res
@@ -78,7 +79,6 @@ import com.lemurs.lemurs_app.util.formatTwoDecimals
 //import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 //import org.koin.compose.viewmodel.koinViewModel
-import org.koin.compose.koinInject
 
 enum class LemurScreen(val title: String) {
     Main(title = "main_screen"),
@@ -125,6 +125,7 @@ fun LemursTopBar(
     val earningsFormatted = formatTwoDecimals(earnings)
     val submissionViewModel: SubmissionViewModel = koinInject()
     val weeklyQuestionsViewModel: WeeklyQuestionsViewModel = koinInject()
+    val surveyAvailabilityViewModel: SurveyAvailabilityViewModel = koinInject()
     val scope = rememberCoroutineScope()
 
     if (currentScreen == LemurScreen.Main) {
@@ -283,15 +284,22 @@ fun LemursTopBar(
                         val skipableScreens = listOf(
                             LemurScreen.Writing, LemurScreen.Audio, LemurScreen.Submission
                         )
+                        val nextScreen =
+                            skipableScreens[(skipableScreens.indexOf(currentScreen) + 1) % skipableScreens.size].name
                         submissionViewModel.markItemSkipped("${currentScreen.name} Prompt")
                         if (currentScreen == LemurScreen.Audio) {
                             scope.launch {
                                 weeklyQuestionsViewModel.submitAllWeeklyData()
+                                // Invalidate cached availability so MainScreen reads fresh state
+                                surveyAvailabilityViewModel.clearAvailabilityCache()
+                                progressViewModel.refreshProgress()
+                                progressViewModel.newRefreshProgress()
+                                surveyAvailabilityViewModel.refreshAvailability()
+                                onNavigateTo(nextScreen)
                             }
+                        } else {
+                            onNavigateTo(nextScreen)
                         }
-                        onNavigateTo(
-                            skipableScreens[(skipableScreens.indexOf(currentScreen) + 1) % skipableScreens.size].name
-                        )
                     }
                 ) {
                     Text(text = "Skip",

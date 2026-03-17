@@ -31,13 +31,18 @@ class SurveyAvailabilityViewModel : ViewModel() {
             )
         }
 
-        if (availability.value == null) {
-            runBlocking {
-                refreshAvailability()
-            }
-        }
-
+        // Return cached value only — callers should use refreshAvailability() to populate.
+        // Returning null means "not yet loaded" and will show a spinner in the UI.
         return availability.value
+    }
+
+    /**
+     * Clear the cached availability so the next caller will trigger a fresh fetch.
+     * Useful after completing or skipping surveys so MainScreen reflects the latest state.
+     */
+    fun clearAvailabilityCache() {
+        logger.d("Clearing survey availability cache")
+        availability.value = null
     }
 
     suspend fun refreshAvailability() {
@@ -49,6 +54,7 @@ class SurveyAvailabilityViewModel : ViewModel() {
 
         try {
             availability.value = fetchAndParseAvailability()
+            logger.d("Fetched survey availability data: ${availability.value}")
         } catch (e: Exception) {
             logger.w("Couldn't fetch survey availability data: ${e.message}")
         }
@@ -69,8 +75,15 @@ class SurveyAvailabilityViewModel : ViewModel() {
 
         val localAvailability = getAvailability()
         if (localAvailability != null && localAvailability.containsKey(type)) {
+            val target = localAvailability[type]!!
             val now = Clock.System.now()
-            return now.until(localAvailability[type]!!, DateTimeUnit.SECOND)
+            val diff = now.until(target, DateTimeUnit.SECOND)
+            // If the scheduled time is in the past or now, treat as already available
+            if (diff <= 0L) {
+                logger.d("Survey '$type' is already available (diff=$diff), returning -1")
+                return -1L
+            }
+            return diff
         }
         return null
     }

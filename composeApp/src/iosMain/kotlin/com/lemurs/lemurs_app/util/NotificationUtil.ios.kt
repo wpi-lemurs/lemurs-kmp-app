@@ -103,7 +103,7 @@ actual class NotificationUtil {
 
         // Remove existing weekly survey notification to avoid duplicates
         center.removePendingNotificationRequestsWithIdentifiers(listOf("weeklySurvey"))
-        
+
         val weeklyContent = UNMutableNotificationContent()
         weeklyContent.setTitle("Weekly Survey")
         weeklyContent.setBody("The weekly survey is now open! Please open the app to complete it.")
@@ -112,11 +112,20 @@ actual class NotificationUtil {
             dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
             timeZone = NSTimeZone.systemTimeZone
         }
-        val date = formatter.dateFromString(nextWeeklySurvey)
+        val date = formatter.dateFromString(nextWeeklySurvey) ?: run {
+            println("❌ Failed to parse weekly survey date: $nextWeeklySurvey")
+            return
+        }
+
+        // Skip scheduling if the date is already in the past
+        if (date.timeIntervalSinceNow <= 0) {
+            println("⚠️ Skipping weekly notification — date is in the past: $nextWeeklySurvey")
+            return
+        }
         val calendar = NSCalendar.currentCalendar
         val components = calendar.components(
             NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or NSCalendarUnitHour or NSCalendarUnitMinute,
-            fromDate = date!!
+            fromDate = date
         )
         val weeklyTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
             components, false
