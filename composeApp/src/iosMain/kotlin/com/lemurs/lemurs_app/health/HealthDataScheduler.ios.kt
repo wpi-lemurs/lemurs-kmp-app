@@ -225,32 +225,36 @@ interface IOSHealthDataCallback {
      * @param steps The step count
      * @param startTimeMillis Start of the measurement period (Unix epoch ms)
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
+     * @param appSource Source device label (for example: iPhone or iWatch)
      */
-    fun onStepsCollected(steps: Long, startTimeMillis: Long, endTimeMillis: Long)
+    fun onStepsCollected(steps: Long, startTimeMillis: Long, endTimeMillis: Long, appSource: String)
 
     /**
      * Called when calories data is collected from HealthKit.
      * @param calories The active calories burned
      * @param startTimeMillis Start of the measurement period (Unix epoch ms)
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
+     * @param appSource Source device label (for example: iPhone or iWatch)
      */
-    fun onCaloriesCollected(calories: Double, startTimeMillis: Long, endTimeMillis: Long)
+    fun onCaloriesCollected(calories: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String)
 
     /**
      * Called when distance data is collected from HealthKit.
      * @param distanceMeters The distance walked/run in meters
      * @param startTimeMillis Start of the measurement period (Unix epoch ms)
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
+     * @param appSource Source device label (for example: iPhone or iWatch)
      */
-    fun onDistanceCollected(distanceMeters: Double, startTimeMillis: Long, endTimeMillis: Long)
+    fun onDistanceCollected(distanceMeters: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String)
 
     /**
      * Called when speed data is collected from HealthKit.
      * @param speedMetersSecond The speed in meters/second
      * @param startTimeMillis Start of the measurement period (Unix epoch ms)
      * @param endTimeMillis End of the measurement period (Unix epoch ms)
+     * @param appSource Source device label (for example: iPhone or iWatch)
      */
-    fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long)
+    fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String)
 
     /**
      * Called when all health data sync is complete
@@ -286,8 +290,8 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
     private val appRepository: AppRepository by inject()
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    override fun onStepsCollected(steps: Long, startTimeMillis: Long, endTimeMillis: Long) {
-        logger.i("📊 Received steps from HealthKit: $steps (sending to API...)")
+    override fun onStepsCollected(steps: Long, startTimeMillis: Long, endTimeMillis: Long, appSource: String) {
+        logger.i("📊 Received steps from HealthKit: $steps from $appSource (sending to API...)")
 
         scope.launch {
             try {
@@ -301,7 +305,7 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
                     steps = steps,
                     start_timestamp = startDateTime,
                     end_timestamp = endDateTime,
-                    appSource = "HealthKit"
+                    appSource = appSource
                 )
 
                 val success = appRepository.sendStepsData(stepsDto)
@@ -316,8 +320,8 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         }
     }
 
-    override fun onCaloriesCollected(calories: Double, startTimeMillis: Long, endTimeMillis: Long) {
-        logger.i("📊 Received calories from HealthKit: $calories (sending to API...)")
+    override fun onCaloriesCollected(calories: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String) {
+        logger.i("📊 Received calories from HealthKit: $calories from $appSource (sending to API...)")
 
         scope.launch {
             try {
@@ -331,7 +335,7 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
                     calories = calories.toInt(),
                     start_timestamp = startDateTime,
                     end_timestamp = endDateTime,
-                    appSource = "HealthKit"
+                    appSource = appSource
                 )
 
                 val success = appRepository.sendCaloriesData(caloriesDto)
@@ -346,8 +350,8 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         }
     }
 
-    override fun onDistanceCollected(distanceMeters: Double, startTimeMillis: Long, endTimeMillis: Long) {
-        logger.i("📊 Received distance from HealthKit: $distanceMeters meters (sending to API...)")
+    override fun onDistanceCollected(distanceMeters: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String) {
+        logger.i("📊 Received distance from HealthKit: $distanceMeters meters from $appSource (sending to API...)")
 
         scope.launch {
             try {
@@ -361,7 +365,7 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
                     distance = distanceMeters,
                     start_timestamp = startDateTime,
                     end_timestamp = endDateTime,
-                    appSource = "HealthKit"
+                    appSource = appSource
                 )
 
                 val success = appRepository.sendDistanceData(distanceDto)
@@ -376,8 +380,8 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
         }
     }
 
-    override fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long) {
-        logger.i("📊 Received speed from HealthKit: $speedMetersSecond meters/second(sending to API...)")
+    override fun onSpeedCollected(speedMetersSecond: Double, startTimeMillis: Long, endTimeMillis: Long, appSource: String) {
+        logger.i("📊 Received speed from HealthKit: $speedMetersSecond meters/second from $appSource (sending to API...)")
 
         scope.launch {
             try {
@@ -391,7 +395,7 @@ class IOSHealthDataCallbackImpl : IOSHealthDataCallback, KoinComponent {
                     speed = listOf(speedMetersSecond),
                     start_timestamp = startDateTime,
                     end_timestamp = endDateTime,
-                    appSource = "HealthKit"
+                    appSource = appSource
                 )
 
                 val success = appRepository.sendSpeedData(speedDto)
