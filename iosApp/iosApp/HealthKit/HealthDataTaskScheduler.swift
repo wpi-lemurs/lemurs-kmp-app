@@ -78,6 +78,7 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         var minStartDate: Date?
         var maxEndDate: Date?
         var sampleCount: Int = 0
+        var appSource: String?
     }
 
     /// Lock for thread-safe access to pending calorie data
@@ -316,6 +317,7 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         var totalValue: Double = 0
         var minStartDate = samples[0].startDate
         var maxEndDate = samples[0].endDate
+        let appSource = resolveAppSource(from: samples[0])
 
         for sample in samples {
             if sample.startDate < minStartDate { minStartDate = sample.startDate }
@@ -351,23 +353,23 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         switch quantityType.identifier {
         case HKQuantityTypeIdentifier.stepCount.rawValue:
             print("  📊 Total Steps: \(Int(totalValue)) | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
-            callback?.onStepsCollected(steps: Int64(totalValue), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            callback?.onStepsCollected(steps: Int64(totalValue), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
         case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
             // Accumulate active calories - will be combined with basal
-            accumulateCalorieData(active: totalValue, basal: 0, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, callback: callback)
+            accumulateCalorieData(active: totalValue, basal: 0, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, appSource: appSource, callback: callback)
 
         case HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
             // Accumulate basal calories - will be combined with active
-            accumulateCalorieData(active: 0, basal: totalValue, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, callback: callback)
+            accumulateCalorieData(active: 0, basal: totalValue, startDate: minStartDate, endDate: maxEndDate, sampleCount: samples.count, appSource: appSource, callback: callback)
 
         case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
             print("  📊 Total Distance: \(Int(totalValue)) m | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
-            callback?.onDistanceCollected(distanceMeters: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            callback?.onDistanceCollected(distanceMeters: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
         case HKQuantityTypeIdentifier.walkingSpeed.rawValue:
             print("  📊 Avg Speed: \(String(format: "%.2f", totalValue)) m/s | \(formatDate(minStartDate)) → \(formatDate(maxEndDate)) (\(samples.count) samples)")
-            callback?.onSpeedCollected(speedMetersSecond: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+            callback?.onSpeedCollected(speedMetersSecond: totalValue, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
         default:
             break
@@ -376,13 +378,16 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
 
     /// Accumulate calorie data from both active and basal sources
     /// When both types are received, sends the combined total to the callback
-    private func accumulateCalorieData(active: Double, basal: Double, startDate: Date, endDate: Date, sampleCount: Int, callback: IOSHealthDataCallback?) {
+    private func accumulateCalorieData(active: Double, basal: Double, startDate: Date, endDate: Date, sampleCount: Int, appSource: String, callback: IOSHealthDataCallback?) {
         calorieDataLock.lock()
         defer { calorieDataLock.unlock() }
 
         pendingCalorieData.activeCalories += active
         pendingCalorieData.basalCalories += basal
         pendingCalorieData.sampleCount += sampleCount
+        if pendingCalorieData.appSource == nil {
+            pendingCalorieData.appSource = appSource
+        }
 
         // Update time range
         if let currentMin = pendingCalorieData.minStartDate {
@@ -413,6 +418,7 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         let minStart = pendingCalorieData.minStartDate
         let maxEnd = pendingCalorieData.maxEndDate
         let sampleCount = pendingCalorieData.sampleCount
+        let appSource = pendingCalorieData.appSource ?? "iOS"
 
         // Reset the accumulator
         pendingCalorieData = PendingCalorieData()
@@ -428,7 +434,7 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         let endTimeMillis = Int64(endDate.timeIntervalSince1970 * 1000)
 
         print("  📊 Total Calories: \(Int(totalCalories)) kcal (Active: \(Int(activeCalories)) + Basal: \(Int(basalCalories))) | \(formatDate(startDate)) → \(formatDate(endDate)) (\(sampleCount) samples)")
-        callback?.onCaloriesCollected(calories: totalCalories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+        callback?.onCaloriesCollected(calories: totalCalories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
     }
 
     /// Process individual samples and send to Kotlin callback (kept for granular mode if needed)
@@ -440,33 +446,34 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
             let endTimeMillis = Int64(sample.endDate.timeIntervalSince1970 * 1000)
 
             let shouldLog = index < samplesToLog
+            let appSource = resolveAppSource(from: sample)
 
             switch quantityType.identifier {
             case HKQuantityTypeIdentifier.stepCount.rawValue:
                 let steps = sample.quantity.doubleValue(for: HKUnit.count())
                 if shouldLog { print("  📍 Steps: \(Int(steps)) | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
-                callback?.onStepsCollected(steps: Int64(steps), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+                callback?.onStepsCollected(steps: Int64(steps), startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
             case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
                 let calories = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
                 if shouldLog { print("  📍 Active Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
-                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
             case HKQuantityTypeIdentifier.basalEnergyBurned.rawValue:
                 let calories = sample.quantity.doubleValue(for: HKUnit.kilocalorie())
                 if shouldLog { print("  📍 Basal Calories: \(Int(calories)) kcal | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
-                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+                callback?.onCaloriesCollected(calories: calories, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
             case HKQuantityTypeIdentifier.distanceWalkingRunning.rawValue:
                 let distance = sample.quantity.doubleValue(for: HKUnit.meter())
                 if shouldLog { print("  📍 Distance: \(Int(distance)) m | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
-                callback?.onDistanceCollected(distanceMeters: distance, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+                callback?.onDistanceCollected(distanceMeters: distance, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
             case HKQuantityTypeIdentifier.walkingSpeed.rawValue:
                 let speedUnit = HKUnit.meter().unitDivided(by: HKUnit.second())
                 let speed = sample.quantity.doubleValue(for: speedUnit)
                 if shouldLog { print("  📍 Speed: \(String(format: "%.2f", speed)) m/s | \(formatDate(sample.startDate)) → \(formatDate(sample.endDate))") }
-                callback?.onSpeedCollected(speedMetersSecond: speed, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis)
+                callback?.onSpeedCollected(speedMetersSecond: speed, startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis, appSource: appSource)
 
             default:
                 break
@@ -483,6 +490,37 @@ private let anchorKeyPrefix = "com.lemurs.healthAnchor."
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         return formatter.string(from: date)
+    }
+
+    /// Resolve a stable platform-like source label from HealthKit sample metadata.
+    /// Prefers concrete device data (iPhone/Apple Watch) and falls back to source name.
+    private func resolveAppSource(from sample: HKQuantitySample) -> String {
+
+        if let device = sample.device {
+
+            let model = device.model?.lowercased() ?? ""
+            let name = device.name?.lowercased() ?? ""
+
+            if model.contains("watch") || name.contains("watch") {
+                return "Apple Watch"
+            }
+
+            if model.contains("iphone") || name.contains("iphone") {
+                return "iPhone"
+            }
+
+            if model.contains("ipad") || name.contains("ipad") {
+                return "iPad"
+            }
+        }
+
+        let source = sample.sourceRevision.source.name.lowercased()
+
+        if source.contains("watch") { return "Apple Watch" }
+        if source.contains("iphone") { return "iPhone" }
+        if source.contains("ipad") { return "iPad" }
+
+        return source.capitalized
     }
 
     // MARK: - Anchor Management
