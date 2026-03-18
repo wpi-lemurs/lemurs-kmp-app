@@ -84,6 +84,12 @@ class ScreentimeUseCase(
                     if (startTime != null) {
                         val duration = event.timeStamp - startTime
                         appTotalDurations[pkg] = (appTotalDurations[pkg] ?: 0L) + duration
+                    } else {
+                        // If an app never started in that chunk but began in an earlier one,
+                        // then startTime would not be recorded on that chunk.
+                        // so we subtract the duration of time the app ran for that chunk.
+                        val duration = event.timeStamp - fifteenMinAgo
+                        appTotalDurations[pkg] = (appTotalDurations[pkg] ?: 0L) + duration
                     }
                 }
             }
