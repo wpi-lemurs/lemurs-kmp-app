@@ -10,10 +10,12 @@ import com.lemurs.lemurs_app.data.local.activeData.SurveyResponse
 import com.lemurs.lemurs_app.data.repositories.AppRepository
 import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
+import com.lemurs.lemurs_app.survey.DangerAlertTrigger
 import com.lemurs.lemurs_app.survey.Questions
 import com.lemurs.lemurs_app.survey.SurveySubmission
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseDailySurvey
+import com.lemurs.lemurs_app.survey.fetchDangerAlertTriggers
 import com.lemurs.lemurs_app.survey.postDailySurvey
 import com.lemurs.lemurs_app.util.DemoMode
 import io.ktor.http.isSuccess
@@ -42,6 +44,8 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
     var surveys = mutableStateOf<List<Surveys>?>(null)
 
     var surveyAnswers = mutableStateOf<HashMap<Int, HashMap<Int, String>>>(hashMapOf())
+    var dangerAlertTriggerQuestionIds = mutableStateOf<Set<Int>>(emptySet())
+    var dangerAlertTriggerThresholds = mutableStateOf<Map<Int, Int>>(emptyMap())
     val logger = Logger.withTag("DailyQuestions")
     var currentQuestionIndex = mutableStateOf(0)
 
@@ -66,11 +70,60 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
                     surveyAnswers.value[survey.id] = hashMapOf()
                 }
             }
+
+            loadDangerAlertTriggers()
         }
     }
 
     suspend fun refreshDailySurvey() {
         surveys.value = fetchAndParseDailySurvey()
+    }
+
+    suspend fun refreshDangerAlertTriggers() {
+        loadDangerAlertTriggers()
+    }
+
+    private suspend fun loadDangerAlertTriggers() {
+        try {
+            val triggers = fetchDangerAlertTriggers().filter { it.resolvedIsActive }
+            dangerAlertTriggerQuestionIds.value =
+                triggers.mapNotNull(DangerAlertTrigger::resolvedQuestionId).toSet()
+            dangerAlertTriggerThresholds.value =
+                triggers.mapNotNull { trigger ->
+                    val questionId = trigger.resolvedQuestionId
+                    val threshold = trigger.resolvedThreshold
+                    if (questionId != null && threshold != null) questionId to threshold else null
+                }.toMap()
+            logger.d {
+                val previewIds = dangerAlertTriggerQuestionIds.value.sorted().take(5)
+                "Loaded danger alert triggers: active=${triggers.size}, " +
+                    "questionIds=${dangerAlertTriggerQuestionIds.value.size}, " +
+                    "thresholds=${dangerAlertTriggerThresholds.value.size}, " +
+                    "previewIds=$previewIds"
+            }
+        } catch (e: Exception) {
+            logger.w("Failed to fetch danger alert triggers: ${e.message}. Falling back to survey metadata.")
+            dangerAlertTriggerQuestionIds.value = emptySet()
+            dangerAlertTriggerThresholds.value = emptyMap()
+        }
+    }
+
+    fun shouldTriggerDangerAlert(question: Questions, normalizedAnswer: String): Boolean {
+        val serverTriggeredQuestion = dangerAlertTriggerQuestionIds.value.contains(question.id)
+        val localTriggeredQuestion = question.resolvedIsTriggerQuestion
+        if (!serverTriggeredQuestion && !localTriggeredQuestion) {
+            return false
+        }
+
+        val isYesAnswer = normalizedAnswer.equals("yes", ignoreCase = true)
+        if (isYesAnswer) {
+            return true
+        }
+
+        val answerValue = normalizedAnswer.toIntOrNull() ?: return false
+        val threshold =
+            dangerAlertTriggerThresholds.value[question.id] ?: question.resolvedTriggerThreshold
+        return threshold != null && answerValue >= threshold
     }
 
 
