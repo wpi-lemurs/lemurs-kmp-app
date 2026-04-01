@@ -481,7 +481,7 @@ Test-multiplatform-mobile/
 1. Open the `iosApp/` directory in Xcode.
 2. In `Constants.kt`, set `IS_DEV = false` so the app targets the production API host. Also set `debugModeEnabled = false`; this only controls developer conveniences (such as survey timer bypassing) and does not change which server is used.
 3. Ensure you are signed in to an Apple ID account with Developer/App Manager access to WPI Organization
-4. In the topbar, select Product/Archive
+4. In the top bar, select **Product > Archive**
 5. Once the build completes, upload to App Store Connect
 6. Read the documentation attached to this section header for more details
 
