@@ -473,7 +473,7 @@ Test-multiplatform-mobile/
 7. Choose the `upload-keystore.jks` file, enter the keystore password, key alias, and key password. Click **Next**.
 8. Select the `release` build type and any desired flavors. Click **Finish**.
 9. The signed APK will be generated in the `composeApp/release` directory.
-10. Then follow the instructions at the following link to update the deployed version: [Deploy new apk](https://github.com/wpi-lemurs/lemurs-api/blob/main/INSTRUCTION.md#how-to-deploy-new-release-apk-to-production-server-and-update-download-link)
+10. Then follow the instructions at the following link to update the deployed version: [Deploy new APK](https://github.com/wpi-lemurs/lemurs-api/blob/main/INSTRUCTION.md#how-to-deploy-new-release-apk-to-production-server-and-update-download-link)
 
 # Creating release builds for iOS
 ## Additional documentation here:  [iOS Archives, TestFlight, App Store Review](https://docs.google.com/document/d/1ysggQhGhi7HLjyIU71ETcorsgIFGWM3wyHwDmES7HQc/edit?tab=t.0#heading=h.nsozuuftronp)
