@@ -479,7 +479,7 @@ Test-multiplatform-mobile/
 ## Additional documentation here:  [iOS Archives, TestFlight, App Store Review](https://docs.google.com/document/d/1ysggQhGhi7HLjyIU71ETcorsgIFGWM3wyHwDmES7HQc/edit?tab=t.0#heading=h.nsozuuftronp)
 
 1. Open the `iosApp/` directory in Xcode.
-2. Make sure your project `Constants.kt` has `IS_DEV = false` and `debugModeEnabled = false`. Otherwise, you'll be targeting the development server on production credentials.
+2. In `Constants.kt`, set `IS_DEV = false` so the app targets the production API host. Also set `debugModeEnabled = false`; this only controls developer conveniences (such as survey timer bypassing) and does not change which server is used.
 3. Ensure you are signed in to an Apple ID account with Developer/App Manager access to WPI Organization
 4. In the topbar, select Product/Archive
 5. Once the build completes, upload to App Store Connect
