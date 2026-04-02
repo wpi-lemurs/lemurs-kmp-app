@@ -272,8 +272,8 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                     logger.w("navigating to home")
                     onNavigate(LemurScreen.Main.name)
                 } else {
-                    logger.w("navigating to info page")
-                    onNavigate(LemurScreen.Information.name)
+                    logger.w("navigating to demographics page")
+                    onNavigate(LemurScreen.Demographics.name)
                 }
             }
 
