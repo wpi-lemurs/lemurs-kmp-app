@@ -243,7 +243,7 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 val oldInner = newOuter[survey.id] ?: HashMap()
                                 val newInner = HashMap(oldInner)
                                 // Normalize yes-no answers
-                                var normalizedAnswer = answer
+                                var normalizedAnswer = answer + 1
                                 if (question.style == "yes-no") {
                                     normalizedAnswer = when (answer) {
                                         "0" -> "yes"
