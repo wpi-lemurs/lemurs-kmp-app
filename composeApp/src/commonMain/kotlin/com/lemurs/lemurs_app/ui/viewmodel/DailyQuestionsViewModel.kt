@@ -112,18 +112,22 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
         val serverTriggeredQuestion = dangerAlertTriggerQuestionIds.value.contains(question.id)
         val localTriggeredQuestion = question.resolvedIsTriggerQuestion
         if (!serverTriggeredQuestion && !localTriggeredQuestion) {
+            logger.w("Trigger alert not triggered for question: $question")
             return false
         }
 
         val isYesAnswer = normalizedAnswer.equals("yes", ignoreCase = true)
         if (isYesAnswer) {
+            logger.w("Trigger alert triggered for question: $question for yes answer")
             return true
         }
 
         val answerValue = normalizedAnswer.toIntOrNull() ?: return false
         val threshold =
             dangerAlertTriggerThresholds.value[question.id] ?: question.resolvedTriggerThreshold
-        return threshold != null && answerValue >= threshold
+        val returnVal = threshold != null && answerValue >= (threshold - 1)
+        logger.w("Trigger alert value $returnVal for question: $question with answer: $answerValue")
+        return returnVal
     }
 
 

@@ -243,7 +243,7 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 val oldInner = newOuter[survey.id] ?: HashMap()
                                 val newInner = HashMap(oldInner)
                                 // Normalize yes-no answers
-                                var normalizedAnswer = answer + 1
+                                var normalizedAnswer = answer
                                 if (question.style == "yes-no") {
                                     normalizedAnswer = when (answer) {
                                         "0" -> "yes"
@@ -258,8 +258,13 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 if (viewModel.shouldTriggerDangerAlert(question, normalizedAnswer)) {
                                     showDangerAlert.value = true
                                 }
+//                                else {
+//                                    showDangerAlert.value = false
+//                                }
+
 
                                 viewModel.surveyAnswers.value = newOuter
+                                logger.w("show danger alert value: ${showDangerAlert.value}")
                             },
                         )
                     }
