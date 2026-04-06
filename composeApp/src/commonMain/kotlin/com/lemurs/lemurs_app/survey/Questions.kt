@@ -22,7 +22,10 @@ data class DangerAlertTrigger(
     val description: String? = null,
     val alertMessage: String? = null,
     @SerialName("alert_message")
-    val alertMessageSnake: String? = null
+    val alertMessageSnake: String? = null,
+    val sendEmail: Boolean? = null,
+    @SerialName("send_email")
+    val sendEmailSnake: Boolean? = null
 ) {
     val resolvedQuestionId: Int?
         get() = questionId ?: questionIdSnake
