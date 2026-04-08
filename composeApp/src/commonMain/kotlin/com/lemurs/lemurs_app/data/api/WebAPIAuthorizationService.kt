@@ -15,6 +15,7 @@ import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.parseToJsonElement
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
@@ -29,7 +30,10 @@ class WebAPIAuthorizationService : KoinComponent {
     //client and service for api call without authorization
     private val httpClient = createPlatformHttpClient {
         install(ContentNegotiation) {
-            json()
+            json(Json {
+                ignoreUnknownKeys = true
+                coerceInputValues = true
+            })
         }
     }
 
@@ -74,7 +78,10 @@ class WebAPIAuthorizationService : KoinComponent {
                     connectTimeoutMillis = 15000
                 }
                 install(ContentNegotiation) {
-                    json()
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        coerceInputValues = true
+                    })
                 }
                 install(Logging) {
                     logger = io.ktor.client.plugins.logging.Logger.SIMPLE
@@ -110,7 +117,10 @@ class WebAPIAuthorizationService : KoinComponent {
                     connectTimeoutMillis = 15000 // 15 seconds for connection
                 }
                 install(ContentNegotiation) {
-                    json()
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        coerceInputValues = true
+                    })
                 }
                 install(Logging) {
                     logger = io.ktor.client.plugins.logging.Logger.SIMPLE
@@ -139,7 +149,10 @@ class WebAPIAuthorizationService : KoinComponent {
                     connectTimeoutMillis = 15000 // 15 seconds for connection
                 }
                 install(ContentNegotiation) {
-                    json()
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        coerceInputValues = true
+                    })
                 }
             }
         }

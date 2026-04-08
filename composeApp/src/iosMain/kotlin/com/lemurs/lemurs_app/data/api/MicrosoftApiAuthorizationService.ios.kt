@@ -2,6 +2,7 @@ package com.lemurs.lemurs_app.data.api
 
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.datastore.JwtTokenResponseImpl
+import com.lemurs.lemurs_app.survey.fetchDemographic
 import com.lemurs.lemurs_app.ui.screens.LemurScreen
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -99,35 +100,9 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
         bridge.acquireToken(
             onSuccess = { accessToken ->
-                logger.i("Token acquired successfully")
+                logger.w("Successfully interactively authenticated")
                 hasAccount = true
-
-                // Call backend to exchange token for JWT
-                mainScope.launch {
-                    try {
-                        val jwtTokenResponseJson = webApiService.accessWebApi(accessToken)
-                        logger.i("Backend JWT exchange successful")
-
-                        // Save tokens to DataStore (like Android does)
-                        val lemursAccessToken = jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content
-                        val refreshToken = jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content
-
-                        if (lemursAccessToken != null && refreshToken != null) {
-                            jwtTokenResponseImpl.updateLemursAccessToken(lemursAccessToken)
-                            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
-                            logger.i("Tokens saved to DataStore")
-                        } else {
-                            logger.e("Failed to parse JWT tokens from response: $jwtTokenResponseJson")
-                        }
-
-                        // Navigate to main screen
-                        navigationCallback?.invoke(LemurScreen.Main.name)
-                    } catch (e: Exception) {
-                        logger.e("Backend API call failed: $e")
-                        // Still navigate to main since MSAL auth succeeded
-                        navigationCallback?.invoke(LemurScreen.Main.name)
-                    }
-                }
+                handleAuthSuccess(accessToken)
             },
             onError = { error ->
                 logger.e("Interactive token acquisition failed: $error")
@@ -150,31 +125,9 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
         bridge.acquireTokenSilently(
             onSuccess = { accessToken ->
-                logger.i("Silent token acquisition successful")
-
-                mainScope.launch {
-                    try {
-                        val jwtTokenResponseJson = webApiService.accessWebApi(accessToken)
-                        logger.i("Backend JWT exchange successful (silent)")
-
-                        // Save tokens to DataStore (like Android does)
-                        val lemursAccessToken = jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content
-                        val refreshToken = jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content
-
-                        if (lemursAccessToken != null && refreshToken != null) {
-                            jwtTokenResponseImpl.updateLemursAccessToken(lemursAccessToken)
-                            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
-                            logger.i("Tokens saved to DataStore (silent)")
-                        } else {
-                            logger.e("Failed to parse JWT tokens from response: $jwtTokenResponseJson")
-                        }
-
-                        navigationCallback?.invoke(LemurScreen.Main.name)
-                    } catch (e: Exception) {
-                        logger.e("Backend API call failed (silent): $e")
-                        navigationCallback?.invoke(LemurScreen.Main.name)
-                    }
-                }
+                logger.w("Successfully silently authenticated")
+                hasAccount = true
+                handleAuthSuccess(accessToken)
             },
             onError = { error ->
                 logger.w("Silent token acquisition failed: $error")
@@ -215,5 +168,33 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 navigationCallback?.invoke(LemurScreen.Login.name)
             }
         )
+    }
+
+    private fun handleAuthSuccess(microsoftToken: String) {
+        logger.w("Microsoft Access token: $microsoftToken")
+        mainScope.launch {
+            val jwtTokenResponseJson = webApiService.accessWebApi(microsoftToken)
+            jwtTokenResponseImpl.updateLemursAccessToken(
+                jwtTokenResponseJson.jsonObject["accessToken"]!!.jsonPrimitive.content
+            )
+            jwtTokenResponseImpl.updateRefreshToken(
+                jwtTokenResponseJson.jsonObject["refreshToken"]!!.jsonPrimitive.content
+            )
+
+            logger.w("navigating out of login")
+            if (!checkDemographicsEmpty()) {
+                logger.w("navigating to home")
+                navigationCallback?.invoke(LemurScreen.Main.name)
+            } else {
+                logger.w("navigating to demographics page")
+                navigationCallback?.invoke(LemurScreen.Demographics.name)
+            }
+        }
+    }
+
+    private suspend fun checkDemographicsEmpty(): Boolean {
+        val demographics = fetchDemographic()
+        logger.w("fetched demographics: $demographics")
+        return demographics.isEmpty()
     }
 }

@@ -1,10 +1,12 @@
 package com.lemurs.lemurs_app.survey
 
 import io.ktor.client.statement.HttpResponse
+import com.lemurs.lemurs_app.survey.DangerAlertTrigger
 
 interface SurveysApi {
     suspend fun getDailySurvey(): List<Surveys>
     suspend fun getWeeklySurvey(): List<Surveys>
+    suspend fun getDangerAlertTriggers(): List<DangerAlertTrigger>
     suspend fun postDailySurvey(surveySubmission: SurveySubmission): HttpResponse
     suspend fun postWeeklySurvey(surveySubmission: SurveySubmission): HttpResponse
     suspend fun postDemographics(demographicsSubmission: DemographicsSubmission): HttpResponse
