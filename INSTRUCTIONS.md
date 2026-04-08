@@ -465,23 +465,25 @@ Test-multiplatform-mobile/
    ```bash
    git checkout release
    ```
-2. Ensure the `upload-keystore.jks` file is present in the `composeApp/` directory. If not, obtain it from the project maintainers.
-3. Check that the Android project files use the correct redirect URI for release builds.
-4. In Android Studio, go to **Build > Generate Signed Bundle / APK...**
-5. Select **APK** and click **Next**.
-6. Choose the `upload-keystore.jks` file, enter the keystore password, key alias, and key password. Click **Next**.
-7. Select the `release` build type and any desired flavors. Click **Finish**.
-8. The signed APK will be generated in the `composeApp/release` directory.
-9. Then follow the instructions at the following link to update the deployed version: [Deploy new apk](https://github.com/wpi-lemurs/lemurs-api/blob/main/INSTRUCTION.md#how-to-deploy-new-release-apk-to-production-server-and-update-download-link)
+2. Make sure your project `Constants.kt` has `IS_DEV = false` and `debugModeEnabled = false`. Otherwise, you'll be targeting the development server on production credentials.
+3. Ensure the `upload-keystore.jks` file is present in the `composeApp/` directory. If not, obtain it from the project maintainers along with the keystore password, alias, and password.
+4. Check that the Android project files use the correct redirect URI for release builds.
+5. In Android Studio, go to **Build > Generate Signed Bundle / APK...**
+6. Select **APK** and click **Next**.
+7. Choose the `upload-keystore.jks` file, enter the keystore password, key alias, and key password. Click **Next**.
+8. Select the `release` build type and any desired flavors. Click **Finish**.
+9. The signed APK will be generated in the `composeApp/release` directory.
+10. Then follow the instructions at the following link to update the deployed version: [Deploy new APK](https://github.com/wpi-lemurs/lemurs-api/blob/main/INSTRUCTION.md#how-to-deploy-new-release-apk-to-production-server-and-update-download-link)
 
 # Creating release builds for iOS
 ## Additional documentation here:  [iOS Archives, TestFlight, App Store Review](https://docs.google.com/document/d/1ysggQhGhi7HLjyIU71ETcorsgIFGWM3wyHwDmES7HQc/edit?tab=t.0#heading=h.nsozuuftronp)
 
 1. Open the `iosApp/` directory in Xcode.
-2. Ensure you are signed into an Apple ID account with Developer/App Manager access to WPI Organization
-3. In the topbar, select Product/Archive
-4. Once the build completes, upload to App Store Connect
-5. Read the documentation for more details
+2. In `Constants.kt`, set `IS_DEV = false` so the app targets the production API host. Also set `debugModeEnabled = false`; this only controls developer conveniences (such as survey timer bypassing) and does not change which server is used.
+3. Ensure you are signed in to an Apple ID account with Developer/App Manager access to WPI Organization
+4. In the top bar, select **Product > Archive**
+5. Once the build completes, upload to App Store Connect
+6. Read the documentation attached to this section header for more details
 
 ## Additional Resources
 
