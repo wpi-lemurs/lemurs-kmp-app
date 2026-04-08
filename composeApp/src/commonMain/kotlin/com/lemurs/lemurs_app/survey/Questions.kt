@@ -2,8 +2,57 @@ package com.lemurs.lemurs_app.survey
 
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.util.DemoMode
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+@Serializable
+data class DangerAlertTrigger(
+    val id: Int? = null,
+    val questionId: Int? = null,
+    @SerialName("question_id")
+    val questionIdSnake: Int? = null,
+    val threshold: Int? = null,
+    @SerialName("triggerThreshold")
+    val triggerThresholdCamel: Int? = null,
+    @SerialName("trigger_threshold")
+    val triggerThresholdSnake: Int? = null,
+    val isActive: Boolean? = null,
+    @SerialName("is_active")
+    val isActiveSnake: Boolean? = null,
+    val description: String? = null,
+    val alertMessage: String? = null,
+    @SerialName("alert_message")
+    val alertMessageSnake: String? = null,
+    val sendEmail: Boolean? = null,
+    @SerialName("send_email")
+    val sendEmailSnake: Boolean? = null
+) {
+    val resolvedQuestionId: Int?
+        get() = questionId ?: questionIdSnake
+
+    val resolvedThreshold: Int?
+        get() = threshold ?: triggerThresholdCamel ?: triggerThresholdSnake
+
+    val resolvedIsActive: Boolean
+        get() = isActive ?: isActiveSnake ?: true
+}
+
+
+@Serializable
+data class QuestionRequirements(
+    val isTriggerQuestion: Boolean = false,
+    val triggerThreshold: Int? = null,
+    @SerialName("is_trigger_question")
+    val isTriggerQuestionSnake: Boolean? = null,
+    @SerialName("trigger_threshold")
+    val triggerThresholdSnake: Int? = null
+) {
+    val resolvedIsTriggerQuestion: Boolean
+        get() = isTriggerQuestion || (isTriggerQuestionSnake == true)
+
+    val resolvedTriggerThreshold: Int?
+        get() = triggerThreshold ?: triggerThresholdSnake
+}
 
 @Serializable
 data class Questions(
@@ -14,9 +63,24 @@ data class Questions(
     val parentQuestionId: Int?,
     val prerequisiteQuestionId: Int?,
     val prerequisiteAnswer: String?,
-    val isTriggerQuestion: Boolean,
-    val triggerThreshold: Int?
-)
+    val isTriggerQuestion: Boolean = false,
+    val triggerThreshold: Int? = null,
+    @SerialName("is_trigger_question")
+    val isTriggerQuestionSnake: Boolean? = null,
+    @SerialName("trigger_threshold")
+    val triggerThresholdSnake: Int? = null,
+    val requirements: QuestionRequirements? = null
+) {
+    // Resolve trigger configuration from either flat fields or nested requirements payload.
+    val resolvedIsTriggerQuestion: Boolean
+        get() =
+            isTriggerQuestion ||
+                (isTriggerQuestionSnake == true) ||
+                (requirements?.resolvedIsTriggerQuestion == true)
+
+    val resolvedTriggerThreshold: Int?
+        get() = triggerThreshold ?: triggerThresholdSnake ?: requirements?.resolvedTriggerThreshold
+}
 
 @Serializable
 data class Surveys(
@@ -240,6 +304,16 @@ suspend fun fetchAndParseWeeklySurvey(): List<Surveys> {
 
     val api = SurveysApiImpl()
     return api.getWeeklySurvey()
+}
+
+suspend fun fetchDangerAlertTriggers(): List<DangerAlertTrigger> {
+    if (DemoMode.isActive) {
+        Logger.withTag("Questions").d("Demo mode: skipping danger alert trigger fetch")
+        return emptyList()
+    }
+
+    val api = SurveysApiImpl()
+    return api.getDangerAlertTriggers()
 }
 
 suspend fun fetchDemographic() :List<Demographic>{

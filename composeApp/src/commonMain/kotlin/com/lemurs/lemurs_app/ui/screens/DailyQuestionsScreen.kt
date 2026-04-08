@@ -255,23 +255,16 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 newInner[question.id] = normalizedAnswer
                                 newOuter[survey.id] = newInner
 
-                                // Danger alert trigger logic
-                                if (question.isTriggerQuestion) {
-                                    val answerValue = normalizedAnswer.toIntOrNull()
-                                    val isYesAnswer = normalizedAnswer.equals("yes", ignoreCase = true)
-
-                                    if (isYesAnswer) {
-                                        showDangerAlert.value = true
-                                    } else if (
-                                        question.triggerThreshold != null &&
-                                        answerValue != null &&
-                                        answerValue >= question.triggerThreshold!!
-                                    ) {
-                                        showDangerAlert.value = true
-                                    }
+                                if (viewModel.shouldTriggerDangerAlert(question, normalizedAnswer)) {
+                                    showDangerAlert.value = true
                                 }
+//                                else {
+//                                    showDangerAlert.value = false
+//                                }
+
 
                                 viewModel.surveyAnswers.value = newOuter
+                                logger.w("show danger alert value: ${showDangerAlert.value}")
                             },
                         )
                     }
