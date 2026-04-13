@@ -250,6 +250,15 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                         "1" -> "no"
                                         else -> answer
                                     }
+                                } else {
+                                    normalizedAnswer = when (answer) {
+                                        "0" -> "1"
+                                        "1" -> "2"
+                                        "2" -> "3"
+                                        "3" -> "4"
+                                        "4" -> "5"
+                                        else -> answer
+                                    }
                                 }
 
                                 newInner[question.id] = normalizedAnswer
@@ -258,10 +267,6 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 if (viewModel.shouldTriggerDangerAlert(question, normalizedAnswer)) {
                                     showDangerAlert.value = true
                                 }
-//                                else {
-//                                    showDangerAlert.value = false
-//                                }
-
 
                                 viewModel.surveyAnswers.value = newOuter
                                 logger.w("show danger alert value: ${showDangerAlert.value}")
