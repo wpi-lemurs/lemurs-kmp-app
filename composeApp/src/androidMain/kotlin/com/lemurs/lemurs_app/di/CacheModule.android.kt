@@ -1,5 +1,8 @@
 package com.lemurs.lemurs_app.di
 
+import com.lemurs.lemurs_app.data.AndroidContextProvider
+import com.lemurs.lemurs_app.data.local.ScreentimeSyncStore
+import com.lemurs.lemurs_app.data.screentime.ScreentimeTimeStore
 import com.lemurs.lemurs_app.health.HealthConnectViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.AndroidAudioFileManager
 import com.lemurs.lemurs_app.ui.viewmodel.AndroidAudioPlayer
@@ -20,6 +23,21 @@ import org.koin.dsl.module
 actual fun platformModule(): Module = module {
     // Register platform implementations under their interface types so Koin can resolve them by interface
     single<AudioRecorder> { AndroidAudioRecorder(get()) }
+
+
+    single<ScreentimeTimeStore> {
+        ScreentimeTimeStore(
+            context = requireNotNull(AndroidContextProvider.context)
+        )
+    }
+
+    single<ScreentimeSyncStore> {
+        ScreentimeTimeStore(
+            context = requireNotNull(AndroidContextProvider.context)
+        )
+    }
+
+
     single<AudioPlayer> { AndroidAudioPlayer() }
     single<AudioFileManager> { AndroidAudioFileManager(get()) }
     single<AudioTimer> { AndroidAudioTimer() }

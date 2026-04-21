@@ -46,6 +46,9 @@ kotlin {
     
     sourceSets {
         androidMain.dependencies {
+
+            implementation("androidx.datastore:datastore-preferences:1.1.1")
+
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
 

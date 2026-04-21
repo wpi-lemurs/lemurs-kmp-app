@@ -45,7 +45,7 @@ NotificationUseCase : KoinComponent {
                 logger.w("Morning survey initial notification will be handled by DailyNotificationSetupWorker")
             }
             //less than 2 hours left:
-            else if(hour == 11 || (hour == 12 && minute < 45)){
+            else if (hour == 11 || (hour == 12 && minute < 45)){
                 val totalMinLeft = (13 - hour)* 60  - minute - 14
                 // Schedule reminders with adjusted timing for late morning
                 notificationScheduler.scheduleReminder((totalMinLeft/2).toLong())
@@ -53,11 +53,12 @@ NotificationUseCase : KoinComponent {
             }
 
             // MODIFIED: Afternoon survey logic - only schedule reminders if initial notification hasn't been sent yet
-            if(hour < 18) {
+            if (hour < 18) {
                 // Check if afternoon initial notification has already been sent today
                 // If not, the DailyNotificationSetupWorker will handle it
                 logger.w("Afternoon survey initial notification will be handled by DailyNotificationSetupWorker")
             }
+
             //less than 2 hours left:
             else if(hour == 18 || (hour == 19 && minute < 45)){
                 val totalMinLeft = (13 - hour)* 60  - minute - 14

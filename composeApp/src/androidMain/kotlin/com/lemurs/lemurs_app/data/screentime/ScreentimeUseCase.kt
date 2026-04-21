@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.AndroidContextProvider
+import com.lemurs.lemurs_app.data.local.ScreentimeSyncStore
 import com.lemurs.lemurs_app.data.local.UseCaseResult
 import com.lemurs.lemurs_app.data.local.passiveData.Screentime
 import com.lemurs.lemurs_app.data.local.passiveData.ScreentimeDAO
@@ -27,16 +28,18 @@ import org.koin.core.component.KoinComponent
  * Use case for getting and storing screen time data
  */
 class ScreentimeUseCase(
-    private val screentimeDAO: ScreentimeDAO
+    private val screentimeDAO: ScreentimeDAO,
+    private val syncStore: ScreentimeSyncStore
+
 ) : KoinComponent {
     private val context : Context = requireNotNull(AndroidContextProvider.context)
-    val logger = Logger.withTag("Screentime")
+    val logger = Logger.withTag("Scrgieentime")
     private val usageStatsManager =
         context.getSystemService(USAGE_STATS_SERVICE) as UsageStatsManager
     private val appOpsManager = context.getSystemService(APP_OPS_SERVICE)!! as AppOpsManager
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    fun getScreenTime(): UseCaseResult<Any> {
+    suspend fun getScreenTime(): UseCaseResult<Any> {
         val screentimeDataList = if (checkPermissions(appOpsManager)) {
             getUsageStats(usageStatsManager)
         } else {
@@ -52,17 +55,24 @@ class ScreentimeUseCase(
             screentimeDAO.insertScreentimeListData(uniqueData)
         }
         logger.w("done adding screentime data")
+        syncStore.saveLastRunTime(System.currentTimeMillis())
         return UseCaseResult.Success(Any())
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
-    fun getUsageStats(usageStatsManager: UsageStatsManager): List<Screentime> {
-        val now = System.currentTimeMillis()
-        val fifteenMinAgo = now - (15 * 60 * 1000)
+    suspend fun getUsageStats(usageStatsManager: UsageStatsManager): List<Screentime> {
+//        val now = System.currentTimeMillis()
+//        val fifteenMinAgo = now - (15 * 60 * 1000)
+//
+//        logger.w("stats from " + Instant.fromEpochMilliseconds(now).toString() + " to " + Instant.fromEpochMilliseconds(fifteenMinAgo).toString())
+//        val events = usageStatsManager.queryEvents(fifteenMinAgo, now)
 
-        logger.w("stats from " + Instant.fromEpochMilliseconds(now).toString() + " to " + Instant.fromEpochMilliseconds(fifteenMinAgo).toString())
+        val lastRun = syncStore.getLastRunTime()
+        val nextRun = lastRun + (15 * 60 * 1000)
+        val events = usageStatsManager.queryEvents(lastRun, nextRun)
 
-        val events = usageStatsManager.queryEvents(fifteenMinAgo, now)
+        logger.w("stats from " + Instant.fromEpochMilliseconds(lastRun).toString() + " to " + Instant.fromEpochMilliseconds(nextRun).toString())
+
         val event = UsageEvents.Event()
 
         val appStartTimes = mutableMapOf<String, Long>()
@@ -80,9 +90,15 @@ class ScreentimeUseCase(
                 }
                 UsageEvents.Event.ACTIVITY_PAUSED,
                 UsageEvents.Event.ACTIVITY_STOPPED -> {
-                    val startTime = appStartTimes.remove(pkg)
-                    if (startTime != null) {
-                        val duration = event.timeStamp - startTime
+                    // If we see a pause/stop without a start, assume it started at the beginning of the 15-minute window
+                    val rawStart = appStartTimes.remove(pkg) ?: lastRun
+
+                    // never count usage time earlier than the start of a 15-minute window.
+                    val chunkStart = maxOf(rawStart, lastRun)
+                    val duration = event.timeStamp - chunkStart
+
+                    if (duration > 0) {
+//                        val duration = event.timeStamp - startTime
                         appTotalDurations[pkg] = (appTotalDurations[pkg] ?: 0L) + duration
                     } else {
                         // If an app never started in that chunk but began in an earlier one,
@@ -117,7 +133,7 @@ class ScreentimeUseCase(
 
                 val screentimeData = Screentime(
                     System.currentTimeMillis().toString(),
-                    Instant.fromEpochMilliseconds(fifteenMinAgo).toString(),
+                    Instant.fromEpochMilliseconds(lastRun).toString(),
                     Instant.fromEpochMilliseconds(now).toString(),
                     pkgName,
                     totalTime,
@@ -135,7 +151,7 @@ class ScreentimeUseCase(
         if (screentimeDataList.isEmpty()) {
             val heartbeatEntry = Screentime(
                 System.currentTimeMillis().toString(),
-                Instant.fromEpochMilliseconds(fifteenMinAgo).toString(),
+                Instant.fromEpochMilliseconds(lastRun).toString(),
                 Instant.fromEpochMilliseconds(now).toString(),
                 "com.lemurs.no_screentime_detected",
                 0L,  // Zero usage time

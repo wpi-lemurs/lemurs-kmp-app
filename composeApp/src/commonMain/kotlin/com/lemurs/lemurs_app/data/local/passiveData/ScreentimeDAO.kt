@@ -10,6 +10,9 @@ interface ScreentimeDAO : BaseDAO<Screentime> {
     suspend fun getScreentimeID(date: String): Screentime?
     suspend fun checkDuplicate(appName: String, totalTime: Long, lastTimeUsed: String): Int
     suspend fun removeDuplicates()
+
+    // Added by Jonathan Buwembo on 2024-06-17 to support batch deletion of screentime entries after successful API submission
+    suspend fun deleteBatch(entries: List<Screentime>)
 }
 
 class ScreentimeDAOImpl : BaseDAOImpl<Screentime>(Screentime::class), ScreentimeDAO {
@@ -52,4 +55,15 @@ class ScreentimeDAOImpl : BaseDAOImpl<Screentime>(Screentime::class), Screentime
             }
         }
     }
+
+    // This method deletes a batch of Screentime entries based on their IDs.
+    // It first collects the ObjectIds of the entries to delete,
+    // then queries for those entries and deletes them in a single write transaction.
+     override suspend fun deleteBatch(entries: List<Screentime>) {
+       val idsToDelete = entries.map { it.getObjectID() }
+        realm().write {
+            val objectsToDelete = query<Screentime>("ID IN $0", idsToDelete).find()
+            delete(objectsToDelete)
+        }
+     }
 }

@@ -11,6 +11,10 @@ open class Screentime() : RealmObject {
     fun getID(): String {
         return this.ID.toHexString()
     }
+
+    fun getObjectID(): ObjectId {
+        return ID
+    }
     var date: String = ""
     var startTime: String = ""
     var endTime: String = ""

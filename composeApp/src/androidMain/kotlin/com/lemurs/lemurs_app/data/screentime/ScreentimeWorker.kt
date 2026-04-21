@@ -16,7 +16,9 @@ import org.koin.core.component.inject
 class ScreentimeWorker(appContext: Context, workerParams: WorkerParameters):
     CoroutineWorker(appContext, workerParams), KoinComponent {
     val screentimeDAO: ScreentimeDAO by inject()
-    val screentimeUseCase = ScreentimeUseCase(screentimeDAO)
+
+    val screentimeStore = ScreentimeTimeStore(appContext)
+    val screentimeUseCase = ScreentimeUseCase(screentimeDAO, screentimeStore)
 
     /**
      * calls passive data use case to do work
