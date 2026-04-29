@@ -106,7 +106,15 @@ fun WeeklyQuestionsScreen(onNavigateTo: (String) -> Unit) {
               val oldInner = newOuter[survey.id] ?: HashMap()
               val newInner = HashMap(oldInner)
               // placed  new answer in the copied inner map and updated it
-              newInner[question.id] = answer
+                val normalizedAnswer = when (answer) {
+                        "0" -> "1"
+                        "1" -> "2"
+                        "2" -> "3"
+                        "3" -> "4"
+                        "4" -> "5"
+                        else -> answer
+                }
+              newInner[question.id] = normalizedAnswer
               newOuter[survey.id] = newInner
               viewModel.surveyAnswers.value = newOuter
 
