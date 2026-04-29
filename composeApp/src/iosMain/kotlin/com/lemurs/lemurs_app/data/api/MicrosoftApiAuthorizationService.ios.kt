@@ -135,8 +135,8 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 if (error == "INTERACTION_REQUIRED") {
                     // Token expired or needs re-auth, will require interactive login
                     logger.i("Interaction required - user will need to login again")
+                    acquireToken()
                 }
-                // User will need to use interactive login
             }
         )
     }
