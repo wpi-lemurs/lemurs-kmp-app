@@ -79,25 +79,11 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     }
 
     /**
-     * Acquire authentication token interactively.
-     * This will present the Microsoft login UI to the user.
+     * Internal helper to perform the actual interactive login.
+     * This bypasses the isSignedIn() check to avoid infinite loops.
      */
-    actual fun acquireToken() {
-        logger.i("Acquiring token interactively")
-
-        val bridge = IOSMSALBridgeProvider.bridge
-        if (bridge == null) {
-            logger.e("Swift MSAL bridge not available")
-            return
-        }
-
-        // Check if already signed in, use silent acquisition
-        if (bridge.isSignedIn()) {
-            logger.i("User already signed in, attempting silent token acquisition")
-            silentlyAcquireToken()
-            return
-        }
-
+    private fun performInteractiveAcquireToken() {
+        val bridge = IOSMSALBridgeProvider.bridge ?: return
         bridge.acquireToken(
             onSuccess = { accessToken ->
                 logger.w("Successfully interactively authenticated")
@@ -112,6 +98,28 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 }
             }
         )
+    }
+
+    /**
+     * Acquire authentication token interactively.
+     * This will present the Microsoft login UI to the user.
+     */
+    actual fun acquireToken() {
+        logger.i("Acquiring token interactively")
+
+        val bridge = IOSMSALBridgeProvider.bridge
+        if (bridge == null) {
+            logger.e("Swift MSAL bridge not available")
+            return
+        }
+
+        // Check if already signed in, use silent acquisition first for a better UX
+        if (bridge.isSignedIn()) {
+            logger.i("User already signed in, attempting silent token acquisition")
+            silentlyAcquireToken()
+        } else {
+            performInteractiveAcquireToken()
+        }
     }
 
     /**
@@ -134,9 +142,9 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
                 if (error == "INTERACTION_REQUIRED") {
                     // Token expired or needs re-auth, will require interactive login
-                    logger.i("Interaction required - user will need to login again")
+                    logger.i("Interaction required - falling back to interactive login")
+                    performInteractiveAcquireToken()
                 }
-                // User will need to use interactive login
             }
         )
     }

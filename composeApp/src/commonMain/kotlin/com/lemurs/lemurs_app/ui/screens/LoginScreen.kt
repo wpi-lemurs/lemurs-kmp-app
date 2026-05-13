@@ -85,7 +85,9 @@ fun LoginScreen(
     val demoTapThreshold = 5
     val tapTimeoutMs = 3000L // Reset tap count if more than 3 seconds between taps
 
-    microsoftService.initClient(onNavigateTo)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        microsoftService.initClient(onNavigateTo)
+    }
 //    val uriHandler = LocalUriHandler.current
     Box(
         modifier = Modifier
