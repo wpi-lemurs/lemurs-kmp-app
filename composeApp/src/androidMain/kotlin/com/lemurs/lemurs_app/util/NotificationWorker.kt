@@ -423,32 +423,24 @@ class WeeklySurveyNotificationWorker(appContext: Context, workerParams: WorkerPa
         }
     }
 
+    /**
+     * Whether the weekly survey is open now.
+     *
+     * The weekly survey is gated on an absolute instant (days since enrolment), not on a time of
+     * day, so this is a straight comparison against the clock.
+     *
+     * The previous version compared the wrong way round — it asked whether 7 PM came *before* the
+     * next-available time, which is true precisely when the survey is still locked — and so
+     * suppressed the notification on exactly the days it should have fired.
+     */
     private suspend fun checkWeeklySurveyAvailable(): Boolean {
-        // Check if weekly survey is still available at 7:00 PM today
-        val calendar = java.util.Calendar.getInstance()
-        val today7PM = java.util.Calendar.getInstance().apply {
-            set(java.util.Calendar.HOUR_OF_DAY, 19)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
+        val status = com.lemurs.lemurs_app.survey.fetchSurveyStatus()
+        if (status == null) {
+            logger.w("Couldn't fetch weekly availability; sending the notification anyway")
+            return true
         }
-        
-        // If it's not yet 7:00 PM, check if 7:00 PM is still within weekly survey availability
-        if (calendar.before(today7PM)) {
-            try {
-                val availability = com.lemurs.lemurs_app.survey.fetchAndParseAvailability()
-                val weeklyAvailability = availability["weekly"]
-                if (weeklyAvailability != null) {
-                    val now = kotlinx.datetime.Clock.System.now()
-                    val sevenPM = kotlinx.datetime.Instant.fromEpochMilliseconds(today7PM.timeInMillis)
-                    // If 7:00 PM time is before or equal to weekly survey availability, it's still available
-                    return sevenPM <= weeklyAvailability
-                }
-            } catch (e: Exception) {
-                logger.w("Couldn't check weekly survey availability: ${e.message}")
-            }
-        }
-        
-        return false
+
+        val nextAvailable = status.weeklyNextAvailable ?: return true
+        return nextAvailable <= kotlinx.datetime.Clock.System.now()
     }
 }

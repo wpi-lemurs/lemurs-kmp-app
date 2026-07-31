@@ -1,115 +1,97 @@
 package com.lemurs.lemurs_app.ui.viewmodel
 
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
-import com.lemurs.lemurs_app.survey.fetchAndParseAvailability
-import com.lemurs.lemurs_app.util.Constants
-import com.lemurs.lemurs_app.util.DemoMode
-import kotlinx.coroutines.runBlocking
+import com.lemurs.lemurs_app.survey.SurveyStatus
+import com.lemurs.lemurs_app.survey.SurveyWindowState
+import com.lemurs.lemurs_app.survey.SurveyWindows
+import com.lemurs.lemurs_app.survey.SurveysApi
+import com.lemurs.lemurs_app.survey.fetchSurveyStatus
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.until
-import kotlin.time.Duration.Companion.hours
 
-class SurveyAvailabilityViewModel : ViewModel() {
-    private var availability = mutableStateOf<Map<String, Instant>?>(null)
-    val logger = Logger.withTag("SurveyAvailability")
+/**
+ * Holds the survey status and re-evaluates it against the phone's clock.
+ *
+ * The server states what the windows are and what has already been submitted today; every decision
+ * about whether something is *open* is made here, in the participant's own timezone. That split is
+ * what makes the app behave correctly outside Eastern.
+ */
+class SurveyAvailabilityViewModel(
+    private val api: SurveysApi
+) : ViewModel() {
 
-    // Debug mode should be disabled by default to prevent interference with normal survey flow
-    private var debugModeEnabled = mutableStateOf(Constants.debugModeEnabled)
+    private val logger = Logger.withTag("SurveyAvailability")
 
-    fun getAvailability(): Map<String, Instant>? {
-        // In demo mode, return mock availability (surveys always available)
-        if (DemoMode.isActive) {
-            logger.d("Demo mode: surveys always available")
-            val now = Clock.System.now()
-            return mapOf(
-                "daily" to now.minus(1.hours),
-                "weekly" to now.minus(1.hours)
-            )
+    private val _status = MutableStateFlow<SurveyStatus?>(null)
+    val status: StateFlow<SurveyStatus?> = _status.asStateFlow()
+
+    /** Advances on a timer so countdowns tick and windows open without needing a refresh. */
+    private val _now = MutableStateFlow(Clock.System.now())
+
+    private val _dailyState = MutableStateFlow<SurveyWindowState?>(null)
+
+    /** Null until the first successful fetch, which the UI shows as a spinner. */
+    val dailyState: StateFlow<SurveyWindowState?> = _dailyState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                delay(TICK_MILLIS)
+                _now.value = Clock.System.now()
+                recompute()
+            }
         }
-
-        // Return cached value only — callers should use refreshAvailability() to populate.
-        // Returning null means "not yet loaded" and will show a spinner in the UI.
-        return availability.value
     }
 
-    /**
-     * Clear the cached availability so the next caller will trigger a fresh fetch.
-     * Useful after completing or skipping surveys so MainScreen reflects the latest state.
-     */
-    fun clearAvailabilityCache() {
-        logger.d("Clearing survey availability cache")
-        availability.value = null
+    /** Fetches in the background; the UI keeps showing the previous state meanwhile. */
+    fun refresh() {
+        viewModelScope.launch { refreshAndWait() }
     }
 
-    suspend fun refreshAvailability() {
-        // In demo mode, don't make API calls
-        if (DemoMode.isActive) {
-            logger.d("Demo mode: skipping availability refresh")
+    /** Fetches and returns only once the state has been updated. */
+    suspend fun refreshAndWait() {
+        val fetched = fetchSurveyStatus(api)
+        if (fetched == null) {
+            // Keep whatever we last knew. Dropping to "closed" on a flaky network
+            // would lock a participant out of a survey that is genuinely open.
+            logger.w("Status fetch failed; keeping the previous state")
             return
         }
-
-        try {
-            availability.value = fetchAndParseAvailability()
-            logger.d("Fetched survey availability data: ${availability.value}")
-        } catch (e: Exception) {
-            logger.w("Couldn't fetch survey availability data: ${e.message}")
-        }
+        _status.value = fetched
+        recompute()
+        logger.d("Status refreshed: $fetched")
     }
 
-    fun secondsUntilAvailable(type: String): Long? {
-        // If demo mode is enabled, always return that surveys are available
-        if (DemoMode.isActive) {
-            logger.d("Demo mode enabled - survey '$type' is always available")
-            return -1L // Negative value indicates survey is available
-        }
-
-        // If debug mode is enabled, always return that surveys are available
-        if (debugModeEnabled.value) {
-            logger.d("Debug mode enabled - survey '$type' is always available")
-            return -1L // Negative value indicates survey is available
-        }
-
-        val localAvailability = getAvailability()
-        if (localAvailability != null && localAvailability.containsKey(type)) {
-            val target = localAvailability[type]!!
-            val now = Clock.System.now()
-            val diff = now.until(target, DateTimeUnit.SECOND)
-            // If the scheduled time is in the past or now, treat as already available
-            if (diff <= 0L) {
-                logger.d("Survey '$type' is already available (diff=$diff), returning -1")
-                return -1L
-            }
-            return diff
-        }
-        return null
+    private fun recompute() {
+        val current = _status.value ?: return
+        _dailyState.value = SurveyWindows.evaluate(
+            windows = current.windows,
+            completedWindowNames = current.completedWindows,
+            at = _now.value
+        )
     }
 
     /**
-     * Enable debug mode to bypass survey timers for testing purposes.
-     * This allows taking surveys multiple times without waiting for the timer.
-     * WARNING: Only use this for testing - it can interfere with normal survey submission flow.
+     * Seconds until the weekly survey opens, or a non-positive value if it is open now.
+     *
+     * The weekly survey is gated on elapsed days rather than time of day, so unlike the daily
+     * windows it genuinely is an absolute instant and needs no timezone reasoning.
      */
-    fun enableDebugMode() {
-        debugModeEnabled.value = true
-        logger.w("Debug mode ENABLED - Survey timers bypassed for testing")
+    fun secondsUntilWeekly(at: Instant = Clock.System.now()): Long? {
+        val next = _status.value?.weeklyNextAvailable ?: return null
+        return at.until(next, DateTimeUnit.SECOND)
     }
 
-    /**
-     * Disable debug mode to restore normal survey timer behavior.
-     */
-    fun disableDebugMode() {
-        debugModeEnabled.value = false
-        logger.w("Debug mode DISABLED - Survey timers restored to normal behavior")
-    }
-
-    /**
-     * Check if debug mode is currently enabled
-     */
-    fun isDebugModeEnabled(): Boolean {
-        return debugModeEnabled.value
+    private companion object {
+        const val TICK_MILLIS = 30_000L
     }
 }

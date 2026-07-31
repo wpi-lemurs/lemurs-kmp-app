@@ -43,6 +43,9 @@ import kotlinx.serialization.json.Json
 class DailyQuestionsViewModel : ViewModel(), KoinComponent {
     var surveys = mutableStateOf<List<Surveys>?>(null)
 
+    /** Which window these questions came from, so the submission is attributed to the right one. */
+    private var currentWindowName: String? = null
+
     var surveyAnswers = mutableStateOf<HashMap<Int, HashMap<Int, String>>>(hashMapOf())
     var dangerAlertTriggerQuestionIds = mutableStateOf<Set<Int>>(emptySet())
     var dangerAlertTriggerThresholds = mutableStateOf<Map<Int, Int>>(emptyMap())
@@ -63,20 +66,25 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
 
     init {
         viewModelScope.launch {
-            surveys.value = fetchAndParseDailySurvey()
-            if (surveys.value != null) {
-                surveyAnswers.value = hashMapOf()
-                for (survey in surveys.value!!) {
-                    surveyAnswers.value[survey.id] = hashMapOf()
-                }
-            }
-
+            loadDailySurvey()
             loadDangerAlertTriggers()
         }
     }
 
     suspend fun refreshDailySurvey() {
-        surveys.value = fetchAndParseDailySurvey()
+        loadDailySurvey()
+    }
+
+    private suspend fun loadDailySurvey() {
+        val fetched = fetchAndParseDailySurvey()
+        currentWindowName = fetched?.first
+        surveys.value = fetched?.second
+
+        val loaded = surveys.value ?: return
+        surveyAnswers.value = hashMapOf()
+        for (survey in loaded) {
+            surveyAnswers.value[survey.id] = hashMapOf()
+        }
     }
 
     suspend fun refreshDangerAlertTriggers() {
@@ -191,48 +199,39 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
         }
     }
 
-    fun getNotificationTime() : Instant{
-        logger.w("getting notification time...")
-        var notificationsStart = Clock.System.now()
+    /**
+     * When the notification that prompted this submission was sent.
+     *
+     * Keyed off the window the questions were actually fetched for, rather than re-deriving it from
+     * hardcoded hours. Falls back to now when no notification fired, which is the correct answer for
+     * a participant who opened the app of their own accord.
+     */
+    fun getNotificationTime(): Instant {
+        val windowName = currentWindowName
+        if (windowName == null) {
+            logger.w("No window recorded for this submission - using current time")
+            return Clock.System.now()
+        }
 
-        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
-
-        val morningStart = LocalTime(8, 0)
-        val morningEnd = LocalTime(13, 0)
-        val afternoonStart = LocalTime(15, 0)
-        val afternoonEnd = LocalTime(20, 0)
-        
-        // Use runBlocking to wait for the result and handle empty notification times
-        notificationsStart = runBlocking {
+        return runBlocking {
             try {
-                if (now >= morningStart && now < morningEnd) {
-                    val morningTime = notificationTimesImpl.getMorningTime().first()
-                    if (!morningTime.isNullOrEmpty()) {
-                        Instant.parse(morningTime)
-                    } else {
-                        logger.w("No morning notification was fired, user opened app directly - using current time")
-                        Clock.System.now()
-                    }
-                } else if (now >= afternoonStart && now < afternoonEnd) {
-                    val afternoonTime = notificationTimesImpl.getAfternoonTime().first()
-                    if (!afternoonTime.isNullOrEmpty()) {
-                        Instant.parse(afternoonTime)
-                    } else {
-                        logger.w("No afternoon notification was fired, user opened app directly - using current time")
-                        Clock.System.now()
-                    }
-                } else {
-                    logger.w("Survey completed outside normal hours - using current time")
+                val fired = when (windowName) {
+                    "morning" -> notificationTimesImpl.getMorningTime().first()
+                    "afternoon" -> notificationTimesImpl.getAfternoonTime().first()
+                    else -> null
+                }
+
+                if (fired.isNullOrEmpty()) {
+                    logger.w("No '$windowName' notification was fired - using current time")
                     Clock.System.now()
+                } else {
+                    Instant.parse(fired)
                 }
             } catch (e: Exception) {
-                logger.e("Error getting notification time: ${e.message}, using current time as fallback")
+                logger.e("Error getting notification time: ${e.message}, using current time")
                 Clock.System.now()
             }
         }
-        
-        logger.w("got notification time: $notificationsStart")
-        return notificationsStart
     }
 
     fun preparingSurveyRequest(){

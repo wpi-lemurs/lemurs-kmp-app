@@ -18,12 +18,13 @@ import io.ktor.http.path
 class SurveysApiImpl() : SurveysApi {
     val client = WebAPIAuthorizationService().getHttpClient()
 
-    override suspend fun getDailySurvey(): List<Surveys> {
+    override suspend fun getDailySurvey(windowName: String): List<Surveys> {
         return client.get {
             url {
                 protocol = URLProtocol.HTTPS
                 host = Constants.LEMURS_API_URL
                 path("/api/survey/daily")
+                parameters.append("windowName", windowName)
             }
         }.body<List<Surveys>>()
     }
@@ -114,12 +115,14 @@ class SurveysApiImpl() : SurveysApi {
         return body
     }
 
-    override suspend fun getSurveyAvailability(): List<SurveyAvailability> {
+    override suspend fun getSurveyStatus(localDate: String, tzId: String): SurveyStatus {
         return client.get {
             url {
                 protocol = URLProtocol.HTTPS
                 host = Constants.LEMURS_API_URL
-                path("/api/survey/available")
+                path("/api/survey/status")
+                parameters.append("localDate", localDate)
+                parameters.append("tzId", tzId)
             }
         }.body()
     }

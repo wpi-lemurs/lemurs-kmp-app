@@ -22,6 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.ui.reusableComponents.GoalsModule
 import com.lemurs.lemurs_app.ui.reusableComponents.SurveyOpenButton
+import com.lemurs.lemurs_app.ui.reusableComponents.WeeklySurveyOpenButton
 import com.lemurs.lemurs_app.ui.theme.LemurButtonBlue
 import com.lemurs.lemurs_app.ui.theme.LemurDarkerGrey
 import com.lemurs.lemurs_app.ui.theme.LemurDarkestGrey
@@ -57,23 +60,19 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
 
     LaunchedEffect(Unit) {
         progressViewModel.newRefreshProgress()
-        surveyAvailabilityViewModel.clearAvailabilityCache()
-        surveyAvailabilityViewModel.refreshAvailability()
-        logger.w("Launched Effect called ${surveyAvailabilityViewModel.getAvailability()}" )
-
-        // Enable debug mode for testing - allows taking surveys multiple times
-        // Comment out this line when not testing
-//        surveyAvailabilityViewModel.enableDebugMode()
+        surveyAvailabilityViewModel.refreshAndWait()
     }
     val currentProgress = progressViewModel.newProgress.value
+    val dailyState by surveyAvailabilityViewModel.dailyState.collectAsState()
+    val surveyStatus by surveyAvailabilityViewModel.status.collectAsState()
 
-    LaunchedEffect(currentProgress?.nextWeeklySurvey) {
+    LaunchedEffect(currentProgress?.nextWeeklySurvey, surveyStatus) {
         // Only run on iOS
         if (getPlatform().name.lowercase().contains("ios")) {
             val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
+            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
             // Only schedule if availability is loaded AND the survey is closed (future date).
-            // When timeUntilWeekly is null (cache not yet loaded) or negative (currently open),
+            // When timeUntilWeekly is null (not yet loaded) or negative (currently open),
             // skip — a subsequent recompose with fresh data will schedule correctly.
             if (nextWeeklySurvey != null && timeUntilWeekly != null && timeUntilWeekly > 0) {
                 scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
@@ -91,30 +90,35 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val timeUntilDaily = surveyAvailabilityViewModel.secondsUntilAvailable("daily")
             Text(
                 text = "Daily Survey",
                 style = MaterialTheme.typography.titleLarge,
                 color = LemurDarkestGrey,
             )
-            if (timeUntilDaily == null) {
+            val currentDailyState = dailyState
+            if (currentDailyState == null) {
                 CircularProgressIndicator()
             } else {
-                SurveyOpenButton(onNavigate = {onNavigateTo(LemurScreen.DailyInformation.name)},  timeUntil = timeUntilDaily)
+                SurveyOpenButton(
+                    onNavigate = { onNavigateTo(LemurScreen.DailyInformation.name) },
+                    state = currentDailyState
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
-            logger.w { "(MainScreen) Weekly timeUntil: $timeUntilWeekly from availability=${surveyAvailabilityViewModel.getAvailability()}" }
+            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
             Text(
                 text = "Weekly Survey",
                 style = MaterialTheme.typography.titleLarge,
                 color = LemurDarkestGrey,
             )
-            if (timeUntilWeekly == null) {
+            if (surveyStatus == null) {
                 CircularProgressIndicator()
             } else {
-                SurveyOpenButton(onNavigate = {onNavigateTo(LemurScreen.WeeklyInformation.name)}, timeUntil = timeUntilWeekly)
+                WeeklySurveyOpenButton(
+                    onNavigate = { onNavigateTo(LemurScreen.WeeklyInformation.name) },
+                    secondsUntilOpen = timeUntilWeekly
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
 

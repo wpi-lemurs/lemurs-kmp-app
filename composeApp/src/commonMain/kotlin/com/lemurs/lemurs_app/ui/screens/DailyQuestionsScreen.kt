@@ -77,7 +77,7 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                     viewModel.submitSurvey()
                     progressViewModel.refreshProgress()
                     progressViewModel.newRefreshProgress()
-                    surveyAvailabilityViewModel.refreshAvailability()
+                    surveyAvailabilityViewModel.refreshAndWait()
                     onNavigateTo(LemurScreen.Submission.name)
                 } finally {
                     isSubmitting = false
@@ -296,7 +296,7 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                                 viewModel.submitSurvey()
                                 progressViewModel.refreshProgress()
                                 progressViewModel.newRefreshProgress()
-                                surveyAvailabilityViewModel.refreshAvailability()
+                                surveyAvailabilityViewModel.refreshAndWait()
                                 onNavigateTo(LemurScreen.Submission.name)
                             } finally {
                                 isSubmitting = false

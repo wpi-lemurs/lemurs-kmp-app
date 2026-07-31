@@ -91,7 +91,7 @@ actual fun AudioScreen(onNavigateTo: (String) -> Unit) {
                     // Refresh progress data AFTER submission is complete
                     progressViewModel.refreshProgress()
                     progressViewModel.newRefreshProgress()
-                    surveyAvailabilityViewModel.refreshAvailability()
+                    surveyAvailabilityViewModel.refreshAndWait()
                     onNavigateTo(LemurScreen.Submission.name)
                 } finally {
                     isSubmitting = false
