@@ -10,6 +10,7 @@ import com.lemurs.lemurs_app.data.local.activeData.SurveyResponse
 import com.lemurs.lemurs_app.data.repositories.AppRepository
 import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
+import com.lemurs.lemurs_app.survey.SubmissionId
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseWeeklySurvey
 import com.lemurs.lemurs_app.util.DemoMode
@@ -120,7 +121,9 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
                     answers = answersJson,
                     timestamp = now.toString(),
                     notificationTime = getNotificationTime().toString(),
-                    type = 2
+                    type = 2,
+                    // Assigned here so the retry path resends the same id.
+                    clientSubmissionId = SubmissionId.generate()
                 )
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)

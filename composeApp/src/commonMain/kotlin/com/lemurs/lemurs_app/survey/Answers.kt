@@ -10,7 +10,14 @@ import kotlinx.serialization.Serializable
 data class SurveySubmission(
     val timestamp: Instant,
     val surveys: List<CompletedSurveys>,
-    val notificationStart : Instant
+    val notificationStart: Instant,
+    /**
+     * Identifies this submission attempt so the server can ignore a repeat of it.
+     *
+     * Generated once when the participant submits and reused for every retry of that attempt, so a
+     * double tap or a resend after a dropped connection stores one response rather than several.
+     */
+    val clientSubmissionId: String
 )
 
 @Serializable

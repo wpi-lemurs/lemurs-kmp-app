@@ -70,9 +70,11 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
     // Function to handle submission after alert
     val handlePostAlertSubmission: () -> Unit = {
         showDangerAlert.value = false
-        coroutineScope.launch {
-            if (!isSubmitting) {
-                isSubmitting = true
+        // Checked before launching rather than inside, so two dismissals cannot
+        // both pass the check before either sets the flag.
+        if (!isSubmitting) {
+            isSubmitting = true
+            coroutineScope.launch {
                 try {
                     viewModel.submitSurvey()
                     progressViewModel.refreshProgress()
@@ -288,10 +290,13 @@ fun DailyQuestionsScreen(onNavigateTo: (String) -> Unit = {}) {
                     isFinalSubmission = true
 
                     // Check if alert should be shown
-                    if (!showDangerAlert.value) {
+                    if (!showDangerAlert.value && !isSubmitting) {
+                        // Set before launching: taps land faster than recomposition
+                        // can disable the button, so checking inside the coroutine
+                        // let a second tap through.
+                        isSubmitting = true
                         // If no alert needed, submit
                         coroutineScope.launch {
-                            isSubmitting = true
                             try {
                                 viewModel.submitSurvey()
                                 progressViewModel.refreshProgress()

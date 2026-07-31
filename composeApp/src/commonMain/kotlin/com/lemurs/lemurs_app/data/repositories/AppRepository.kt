@@ -191,7 +191,10 @@ class AppRepository(
             SurveySubmission(
                 timestamp = submissionTimestamp,
                 surveys = listOf(completedSurvey), // Wrap the single survey in a list
-                notificationStart = notificationTime
+                notificationStart = notificationTime,
+                // Reuse the id from the original attempt so this retry is
+                // recognised as the same submission rather than a new one.
+                clientSubmissionId = response.clientSubmissionId
             )
         } catch (e: Exception) {
             // Use a specific logger tag for better debugging.

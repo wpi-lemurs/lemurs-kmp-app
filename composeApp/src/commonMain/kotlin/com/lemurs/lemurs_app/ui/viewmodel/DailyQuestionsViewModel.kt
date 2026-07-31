@@ -12,6 +12,7 @@ import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
 import com.lemurs.lemurs_app.survey.DangerAlertTrigger
 import com.lemurs.lemurs_app.survey.Questions
+import com.lemurs.lemurs_app.survey.SubmissionId
 import com.lemurs.lemurs_app.survey.SurveySubmission
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseDailySurvey
@@ -166,7 +167,11 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
             val completedSurvey = CompletedSurveys(surveyId, answers)
             completedSurveys.add(completedSurvey)
         }
-        val submission = SurveySubmission(now, completedSurveys, getNotificationTime())
+        // Generated once for this attempt and reused if it has to be retried, so
+        // the server can tell a resend apart from a second submission.
+        val submissionId = SubmissionId.generate()
+
+        val submission = SurveySubmission(now, completedSurveys, getNotificationTime(), submissionId)
         try {
             // Try to submit survey
             val result = postDailySurvey(submission) // Should return Boolean or Result
@@ -184,7 +189,8 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
                     answers = answersJson,
                     timestamp = now.toString(),
                     notificationTime = getNotificationTime().toString(),
-                    type = surveyType
+                    type = surveyType,
+                    clientSubmissionId = submissionId
                 )
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)
