@@ -3,69 +3,48 @@ package com.lemurs.lemurs_app.data.datastore
 import androidx.datastore.core.DataStore
 import com.lemurs.NotificationTimes
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 interface NotificationTimesInterface {
-    suspend fun updateMorningTime(morning: String)
-    suspend fun updateAfternoonTime(afternoon: String)
+    /** Records when the notification for [windowName] was sent. */
+    suspend fun updateWindowTime(windowName: String, firedAt: String)
     suspend fun updateDate(today: String)
-    fun getMorningTime(): Flow<String>
-    fun getAfternoonTime(): Flow<String>
+    suspend fun updateCachedWindows(windowsJson: String)
+
+    /** When [windowName]'s notification fired, or empty if it has not. */
+    fun getWindowTime(windowName: String): Flow<String>
     fun getDate(): Flow<String>
-    suspend fun buildNotificationTimes(): NotificationTimesObject
+    fun getCachedWindows(): Flow<String>
 }
 
-
+/**
+ * Stores when each window's notification fired, so a submission can be timed against the nudge that
+ * prompted it.
+ *
+ * Keyed by window name rather than fixed morning/afternoon fields: the set of windows comes from the
+ * database and can change without an app release.
+ */
 class NotificationTimesImpl(private val dataStore: DataStore<NotificationTimes>) :
     NotificationTimesInterface {
 
-    override suspend fun updateMorningTime(morning: String) {
-        dataStore.updateData { currentNotificationTimes ->
-            currentNotificationTimes.copy(morningTime = morning)
-        }
-    }
-
-    override suspend fun updateAfternoonTime(afternoon: String) {
-        dataStore.updateData { currentNotificationTimes ->
-            currentNotificationTimes.copy(afternoonTime = afternoon)
+    override suspend fun updateWindowTime(windowName: String, firedAt: String) {
+        dataStore.updateData { current ->
+            current.copy(windowTimes = current.windowTimes + (windowName to firedAt))
         }
     }
 
     override suspend fun updateDate(today: String) {
-        dataStore.updateData { currentNotificationTimes ->
-            currentNotificationTimes.copy(date = today)
-        }
+        dataStore.updateData { current -> current.copy(date = today) }
     }
 
-    override fun getMorningTime(): Flow<String> {
-        return dataStore.data
-            .map { notificationTimes ->
-                notificationTimes.morningTime
-            }
+    override suspend fun updateCachedWindows(windowsJson: String) {
+        dataStore.updateData { current -> current.copy(cachedWindows = windowsJson) }
     }
 
-    override fun getAfternoonTime(): Flow<String> {
-        val c = dataStore.data
-        return c
-            .map { notificationTimes ->
-                notificationTimes.afternoonTime
-            }
-    }
+    override fun getWindowTime(windowName: String): Flow<String> =
+        dataStore.data.map { it.windowTimes[windowName] ?: "" }
 
-    override fun getDate(): Flow<String> {
-        val c = dataStore.data
-        return c
-            .map { notificationTimes ->
-                notificationTimes.date
-            }
-    }
+    override fun getDate(): Flow<String> = dataStore.data.map { it.date }
 
-    override suspend fun buildNotificationTimes(): NotificationTimesObject {
-        return NotificationTimesObject(
-            getMorningTime().first().toString(),
-            getAfternoonTime().first().toString(),
-            getDate().first().toString()
-        )
-    }
+    override fun getCachedWindows(): Flow<String> = dataStore.data.map { it.cachedWindows }
 }

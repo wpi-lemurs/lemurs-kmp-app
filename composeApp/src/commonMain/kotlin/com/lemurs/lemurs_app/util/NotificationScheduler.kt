@@ -1,16 +1,41 @@
 package com.lemurs.lemurs_app.util
 
-expect class NotificationScheduler(time: String) {
-    fun scheduleNotify()
-    fun scheduleReminder(delay: Long)
-    fun scheduleFinalReminder(delay: Long, timeLeft: String)
-    fun scheduleRandomReminders()
-    fun scheduleNotifications(delay: Long, time: String, delayOne: Long, delayTwo: Long, timeLeft: Int)
-    fun scheduleInitialMorningNotificationAtTime(hour: Int, minute: Int, forceToday: Boolean = false)
-    fun scheduleInitialAfternoonNotificationAtTime(hour: Int, minute: Int, forceToday: Boolean = false)
+import kotlinx.datetime.LocalTime
+
+/**
+ * Schedules survey notifications.
+ *
+ * Every method takes the window name rather than being duplicated per window, so the set of windows
+ * can change in the database without an app release.
+ */
+expect class NotificationScheduler() {
+
+    /** Arms the pre-dawn alarms that plan each day's notifications. */
     fun scheduleDailyNotificationSetup()
-    fun scheduleReminderWithAlarm(delayMinutes: Long, title: String, body: String, requestCode: Int)
-    fun scheduleLateMorningNotificationAtTime(hour: Int, minute: Int)
-    fun scheduleLateAfternoonNotificationAtTime(hour: Int, minute: Int)
+
+    /** Re-arms tomorrow's setup alarms, since they are one-shot. */
     fun rescheduleDailySetupsForTomorrow()
+
+    /**
+     * Schedules [windowName]'s opening nudge for [atLocalTime] today.
+     *
+     * [forceToday] keeps a time that has already passed today rather than rolling it to tomorrow,
+     * which is what a setup that ran late needs.
+     */
+    fun scheduleInitialNotification(windowName: String, atLocalTime: LocalTime, forceToday: Boolean)
+
+    /** Schedules a single "last call" for [windowName], with no follow-up reminders. */
+    fun scheduleLastChanceNotification(windowName: String)
+
+    /** Schedules a reminder for [windowName] to fire [delayMinutes] from now. */
+    fun scheduleReminder(
+        windowName: String,
+        delayMinutes: Long,
+        title: String,
+        body: String,
+        isFinal: Boolean
+    )
+
+    /** Schedules the weekly survey notification. */
+    fun scheduleWeeklySurveyNotification()
 }

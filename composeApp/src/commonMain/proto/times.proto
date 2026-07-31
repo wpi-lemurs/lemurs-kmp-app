@@ -4,7 +4,16 @@ option java_package = "com.lemurs";
 option java_multiple_files = true;
 
 message NotificationTimes {
-      string morningTime = 1;
-      string afternoonTime = 2;
+      // The local date these times belong to, so a stale day can be detected.
       string date = 3;
+
+      // When the notification for each window was actually sent, keyed by window
+      // name. Replaces the fixed morningTime/afternoonTime pair, which could not
+      // represent a third window or a renamed one.
+      map<string, string> windowTimes = 4;
+
+      // The most recently fetched survey windows, as JSON. The setup worker runs
+      // before dawn when connectivity is least reliable; this is what lets it
+      // still plan a schedule after a night with no network.
+      string cachedWindows = 5;
 }

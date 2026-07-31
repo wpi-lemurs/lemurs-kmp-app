@@ -215,13 +215,9 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
 
         return runBlocking {
             try {
-                val fired = when (windowName) {
-                    "morning" -> notificationTimesImpl.getMorningTime().first()
-                    "afternoon" -> notificationTimesImpl.getAfternoonTime().first()
-                    else -> null
-                }
+                val fired = notificationTimesImpl.getWindowTime(windowName).first()
 
-                if (fired.isNullOrEmpty()) {
+                if (fired.isEmpty()) {
                     logger.w("No '$windowName' notification was fired - using current time")
                     Clock.System.now()
                 } else {
