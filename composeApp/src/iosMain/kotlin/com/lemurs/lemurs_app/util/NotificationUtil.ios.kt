@@ -5,9 +5,15 @@ import platform.Foundation.*
 import platform.UserNotifications.*
 
 actual class NotificationUtil {
-    actual fun checkSurveyCompleted(): Boolean {
-        return true
-    }
+    /**
+     * Whether the open window has already been submitted.
+     *
+     * Always false on iOS: notifications here are pre-registered repeating triggers that iOS fires
+     * itself, so there is no point at which the app can run this check and suppress one. Returning
+     * false keeps the meaning honest ("not known to be complete") rather than claiming completion
+     * and, on any future caller, silently withholding a reminder.
+     */
+    actual fun checkSurveyCompleted(): Boolean = false
 
     actual fun sendNotificationText(
         title: String,
@@ -40,107 +46,5 @@ actual class NotificationUtil {
             options = UNAuthorizationOptionAlert or UNAuthorizationOptionSound or UNAuthorizationOptionBadge,
             completionHandler = { _, _ -> }
         )
-    }
-
-    fun scheduleDailySurveyNotifications() {
-        val center = UNUserNotificationCenter.currentNotificationCenter()
-
-        // Remove existing daily survey notifications to avoid duplicates
-        center.removePendingNotificationRequestsWithIdentifiers(listOf("morningSurvey", "afternoonSurvey"))
-
-        // Morning
-        val morningContent = UNMutableNotificationContent()
-        morningContent.setTitle("Morning Survey")
-        morningContent.setBody("The morning survey is now open! Please open the app to complete it.")
-        morningContent.setSound(UNNotificationSound.defaultSound())
-        val morningDate = NSDateComponents().apply {
-            hour = 8
-            minute = 0
-        }
-        val morningTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
-            morningDate, true
-        )
-        val morningRequest = UNNotificationRequest.requestWithIdentifier(
-            identifier = "morningSurvey",
-            content = morningContent,
-            trigger = morningTrigger
-        )
-        center.addNotificationRequest(morningRequest) { error ->
-            if (error != null) {
-                println("❌ Failed to schedule morning notification: ${error.localizedDescription}")
-            } else {
-                println("✅ Scheduled morning survey notification for 08:00")
-            }
-        }
-        // Afternoon
-        val afternoonContent = UNMutableNotificationContent()
-        afternoonContent.setTitle("Afternoon Survey")
-        afternoonContent.setBody("The afternoon survey is now open! Please open the app to complete it.")
-        afternoonContent.setSound(UNNotificationSound.defaultSound())
-        val afternoonDate = NSDateComponents().apply {
-            hour = 15
-            minute = 0
-        }
-        val afternoonTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
-            afternoonDate, true
-        )
-        val afternoonRequest = UNNotificationRequest.requestWithIdentifier(
-            identifier = "afternoonSurvey",
-            content = afternoonContent,
-            trigger = afternoonTrigger
-        )
-        center.addNotificationRequest(afternoonRequest) { error ->
-            if (error != null) {
-                println("❌ Failed to schedule afternoon notification: ${error.localizedDescription}")
-            } else {
-                println("✅ Scheduled afternoon survey notification for 15:00")
-            }
-        }
-    }
-
-    fun scheduleWeeklySurveyNotification(nextWeeklySurvey: String) {
-        val center = UNUserNotificationCenter.currentNotificationCenter()
-
-        // Remove existing weekly survey notification to avoid duplicates
-        center.removePendingNotificationRequestsWithIdentifiers(listOf("weeklySurvey"))
-
-        val weeklyContent = UNMutableNotificationContent()
-        weeklyContent.setTitle("Weekly Survey")
-        weeklyContent.setBody("The weekly survey is now open! Please open the app to complete it.")
-        weeklyContent.setSound(UNNotificationSound.defaultSound())
-        val formatter = NSDateFormatter().apply {
-            dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-            timeZone = NSTimeZone.systemTimeZone
-        }
-        val date = formatter.dateFromString(nextWeeklySurvey) ?: run {
-            println("❌ Failed to parse weekly survey date: $nextWeeklySurvey")
-            return
-        }
-
-        // Skip scheduling if the date is already in the past
-        if (date.timeIntervalSinceNow <= 0) {
-            println("⚠️ Skipping weekly notification — date is in the past: $nextWeeklySurvey")
-            return
-        }
-        val calendar = NSCalendar.currentCalendar
-        val components = calendar.components(
-            NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or NSCalendarUnitHour or NSCalendarUnitMinute,
-            fromDate = date
-        )
-        val weeklyTrigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
-            components, false
-        )
-        val weeklyRequest = UNNotificationRequest.requestWithIdentifier(
-            identifier = "weeklySurvey",
-            content = weeklyContent,
-            trigger = weeklyTrigger
-        )
-        center.addNotificationRequest(weeklyRequest) { error ->
-            if (error != null) {
-                println("❌ Failed to schedule weekly notification: ${error.localizedDescription}")
-            } else {
-                println("✅ Scheduled weekly survey notification for $nextWeeklySurvey")
-            }
-        }
     }
 }

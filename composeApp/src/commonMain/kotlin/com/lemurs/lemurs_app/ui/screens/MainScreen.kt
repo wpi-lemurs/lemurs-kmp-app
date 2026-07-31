@@ -47,7 +47,7 @@ import com.lemurs.lemurs_app.getPlatform
 import org.koin.compose.viewmodel.koinViewModel
 
 // Platform-specific expect declaration for iOS notification scheduling
-expect fun scheduleWeeklySurveyNotificationIos(nextWeeklySurvey: String)
+expect fun registerIosNotifications()
 
 @Composable
 fun MainScreen(onNavigateTo: (String) -> Unit) {
@@ -66,20 +66,14 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
     val dailyState by surveyAvailabilityViewModel.dailyState.collectAsState()
     val surveyStatus by surveyAvailabilityViewModel.status.collectAsState()
 
-    LaunchedEffect(currentProgress?.nextWeeklySurvey, surveyStatus) {
-        // Only run on iOS
-        if (getPlatform().name.lowercase().contains("ios")) {
-            val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
-            // Only schedule if availability is loaded AND the survey is closed (future date).
-            // When timeUntilWeekly is null (not yet loaded) or negative (currently open),
-            // skip — a subsequent recompose with fresh data will schedule correctly.
-            if (nextWeeklySurvey != null && timeUntilWeekly != null && timeUntilWeekly > 0) {
-                scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
-                logger.w { "Scheduled weekly survey notification for $nextWeeklySurvey" }
-            } else {
-                logger.w { "Skipping notification scheduling (timeUntilWeekly=$timeUntilWeekly)" }
-            }
+    // iOS registers its notifications as repeating calendar triggers rather than
+    // planning them each morning, so they are re-registered whenever fresh windows
+    // arrive. The launch-time call in iOSApp.swift runs before login and cannot
+    // fetch them, which makes this the point where a first run gets scheduled.
+    LaunchedEffect(surveyStatus) {
+        if (surveyStatus != null && getPlatform().name.lowercase().contains("ios")) {
+            registerIosNotifications()
+            logger.w { "Registered iOS notifications from fetched windows" }
         }
     }
 
