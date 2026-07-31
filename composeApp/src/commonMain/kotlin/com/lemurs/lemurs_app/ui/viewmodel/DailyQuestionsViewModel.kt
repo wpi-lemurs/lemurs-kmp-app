@@ -18,6 +18,7 @@ import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseDailySurvey
 import com.lemurs.lemurs_app.survey.fetchDangerAlertTriggers
 import com.lemurs.lemurs_app.survey.postDailySurvey
+import com.lemurs.lemurs_app.util.cancelNotificationsForCompletedWindow
 import com.lemurs.lemurs_app.util.DemoMode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
@@ -178,6 +179,10 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
             if (!result.status.isSuccess()) {
                 throw Exception("Network is unreachable or server error")
             }
+
+            // Only on success: a submission that failed is queued for retry, so the
+            // participant still has the survey outstanding and should be reminded.
+            currentWindowName?.let { cancelNotificationsForCompletedWindow(it) }
         } catch (e: Exception) {
             // Save locally and schedule worker
             val surveyType = getSurveyType()

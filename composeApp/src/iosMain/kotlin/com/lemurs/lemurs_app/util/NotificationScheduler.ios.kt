@@ -1,7 +1,10 @@
 package com.lemurs.lemurs_app.util
 
 import co.touchlab.kermit.Logger
+import com.lemurs.lemurs_app.survey.SurveyWindows
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 import platform.Foundation.NSCalendar
 import platform.Foundation.NSCalendarUnitDay
 import platform.Foundation.NSCalendarUnitHour
@@ -22,34 +25,42 @@ import platform.UserNotifications.UNUserNotificationCenter
  * iOS notification scheduling.
  *
  * iOS has no AlarmManager equivalent and no way to wake the app before dawn to re-plan the day, so
- * the approach differs from Android by necessity: notifications are registered once as *repeating
- * calendar triggers*, and iOS fires them itself.
+ * notifications are registered ahead of time and iOS fires them itself, with the app not running.
  *
- * This turns out to suit the problem well. A [UNCalendarNotificationTrigger] built from hour and
- * minute components fires at that wall-clock time in whatever timezone the phone is currently in,
- * and re-anchors automatically when the participant relocates. Android needs an explicit
- * TIMEZONE_CHANGED receiver to get the same behaviour.
+ * Each registration is a *one-shot* calendar trigger for a specific date. A repeating trigger would
+ * be tidier, but it cannot be cancelled for a single day: removing it because the participant has
+ * already submitted would silence that window permanently. One-shot registrations are cancellable,
+ * at the cost of needing [IosNotificationSetup.refreshFromServer] to arm the next occurrence
+ * whenever the app is foregrounded.
  *
- * The tradeoff is that the time within a window cannot be randomised per day, since that would need
- * code to run each morning. Notifications land at a fixed offset into each window instead.
+ * Because iOS delivers these without consulting the app, completion is handled by cancelling at
+ * submission rather than by checking at delivery time the way Android does.
+ *
+ * The time within a window is a fixed offset rather than randomised per day, since randomising
+ * would need code to run each morning.
  */
 actual class NotificationScheduler actual constructor() {
     private val logger = Logger.withTag("NotificationScheduler")
 
     /**
-     * On iOS the day is not planned from an alarm; [scheduleWindowNotifications] registers repeating
-     * triggers instead. Kept as a no-op so shared code can call it unconditionally.
+     * On iOS the day is not planned from an alarm; [IosNotificationSetup] registers notifications
+     * directly. Kept as a no-op so shared code can call it unconditionally.
      */
     actual fun scheduleDailyNotificationSetup() {}
 
-    /** Not needed: repeating triggers re-arm themselves. */
+    /** Not needed: the next occurrence is armed whenever the app is foregrounded. */
     actual fun rescheduleDailySetupsForTomorrow() {}
 
     /**
-     * Registers a repeating daily notification for [windowName] at [atLocalTime].
+     * Registers a one-shot notification for [windowName] at the next occurrence of [atLocalTime].
      *
-     * [forceToday] is ignored: a repeating calendar trigger has no notion of a single day, and iOS
-     * will fire the next matching wall-clock time on its own.
+     * Deliberately not a repeating trigger. A repeating one cannot be cancelled for a single day:
+     * removing it because the participant already submitted would also remove every future day's
+     * notification, and they would never be reminded about that window again. A one-shot fired for
+     * a specific date can be cancelled freely, because [IosNotificationSetup] re-registers the next
+     * occurrence each time the app comes to the foreground.
+     *
+     * [forceToday] is ignored; the next matching wall-clock time is always used.
      */
     actual fun scheduleInitialNotification(
         windowName: String,
@@ -66,27 +77,49 @@ actual class NotificationScheduler actual constructor() {
             setSound(UNNotificationSound.defaultSound())
         }
 
-        val components = NSDateComponents().apply {
-            hour = atLocalTime.hour.toLong()
-            minute = atLocalTime.minute.toLong()
-        }
+        val components = nextOccurrenceComponents(atLocalTime)
 
         center.addNotificationRequest(
             UNNotificationRequest.requestWithIdentifier(
                 identifier = identifier,
                 content = content,
-                // repeats = true: fires daily at this wall-clock time, following
-                // the phone's current timezone.
                 trigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
-                    components, true
+                    components, false
                 )
             )
         ) { error ->
             if (error != null) {
                 logger.e("Failed to schedule '$windowName': ${error.localizedDescription}")
             } else {
-                logger.w("Scheduled '$windowName' notification for $atLocalTime daily")
+                logger.w("Scheduled '$windowName' notification for the next $atLocalTime")
             }
+        }
+    }
+
+    /**
+     * Date components for the next time the clock reads [atLocalTime], today or tomorrow.
+     *
+     * Year, month and day are included so the trigger fires once rather than daily. Built from the
+     * calendar rather than by adding 24 hours, so a daylight saving transition still lands on the
+     * right wall-clock time.
+     */
+    private fun nextOccurrenceComponents(atLocalTime: LocalTime): NSDateComponents {
+        val zone = SurveyWindows.systemZone()
+        val today = SurveyWindows.localDate(zone = zone)
+        val nowLocal = SurveyWindows.nowLocalTime(zone = zone)
+
+        // If the slot has already passed today, aim at tomorrow's. Computed on the
+        // local date rather than by adding 24 hours, so a daylight saving change
+        // still lands on the intended wall-clock time.
+        val targetDate =
+            if (atLocalTime > nowLocal) today else today.plus(1, DateTimeUnit.DAY)
+
+        return NSDateComponents().apply {
+            year = targetDate.year.toLong()
+            month = targetDate.monthNumber.toLong()
+            day = targetDate.dayOfMonth.toLong()
+            hour = atLocalTime.hour.toLong()
+            minute = atLocalTime.minute.toLong()
         }
     }
 
@@ -202,19 +235,27 @@ actual class NotificationScheduler actual constructor() {
             .removePendingNotificationRequestsWithIdentifiers(LEGACY_IDENTIFIERS)
     }
 
+    /**
+     * Cancels every pending notification for one window.
+     *
+     * Called when the participant submits that window's survey, so they are not reminded to do
+     * something they have already done. Safe when nothing is pending.
+     *
+     * Only affects the current occurrence: [IosNotificationSetup] re-registers the next one when
+     * the app is next foregrounded, so cancelling today does not silence the window permanently.
+     */
+    fun cancelNotificationsFor(windowName: String) {
+        UNUserNotificationCenter.currentNotificationCenter()
+            .removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName))
+        logger.w("Cancelled pending '$windowName' notifications after submission")
+    }
+
     /** Clears every pending survey notification for [windowNames], before re-registering them. */
     fun clearWindowNotifications(windowNames: List<String>) {
-        val identifiers = windowNames.flatMap {
-            listOf(
-                initialIdentifier(it),
-                reminderIdentifier(it, isFinal = false),
-                reminderIdentifier(it, isFinal = true),
-                "lastChance-$it"
-            )
-        } + LEGACY_IDENTIFIERS
-
         UNUserNotificationCenter.currentNotificationCenter()
-            .removePendingNotificationRequestsWithIdentifiers(identifiers)
+            .removePendingNotificationRequestsWithIdentifiers(
+                windowNames.flatMap(::identifiersFor) + LEGACY_IDENTIFIERS
+            )
     }
 
     private companion object {
@@ -233,5 +274,13 @@ actual class NotificationScheduler actual constructor() {
         fun initialIdentifier(windowName: String) = "initial-$windowName"
         fun reminderIdentifier(windowName: String, isFinal: Boolean) =
             if (isFinal) "finalReminder-$windowName" else "firstReminder-$windowName"
+
+        /** Every identifier one window can have pending. */
+        fun identifiersFor(windowName: String) = listOf(
+            initialIdentifier(windowName),
+            reminderIdentifier(windowName, isFinal = false),
+            reminderIdentifier(windowName, isFinal = true),
+            "lastChance-$windowName"
+        )
     }
 }

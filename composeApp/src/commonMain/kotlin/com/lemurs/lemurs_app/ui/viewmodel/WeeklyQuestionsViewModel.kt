@@ -13,6 +13,7 @@ import com.lemurs.lemurs_app.survey.CompletedSurveys
 import com.lemurs.lemurs_app.survey.SubmissionId
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseWeeklySurvey
+import com.lemurs.lemurs_app.util.cancelNotificationsForCompletedWindow
 import com.lemurs.lemurs_app.util.DemoMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -312,6 +313,8 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
 
         if(appRepository.handleSurveyResponse()){
             logger.d { "All weekly data submitted successfully" }
+            // Nothing left to remind them about this week.
+            cancelNotificationsForCompletedWindow(WEEKLY_WINDOW)
             // Reset state for next weekly survey session
             resetSurveyState()
         }

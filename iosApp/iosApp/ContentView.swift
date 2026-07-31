@@ -23,6 +23,10 @@ struct ContentView: View {
                     // App became active - try to set up observer queries (will check authorization internally)
                     print("📱 App became active")
                     HealthDataTaskScheduler.shared.setupObserverQueries()
+                    // Re-register survey notifications. Registrations are one-shot so
+                    // this is what arms the next occurrence, and it skips any window
+                    // already submitted today.
+                    ComposeApp.IosNotificationSetup.shared.refreshFromServer()
                     if !didInitialBLEScan {
                         BluetoothBackgroundEntrypointKt.runBluetoothBackgroundScan(durationSeconds: 15)
                         didInitialBLEScan = true
