@@ -74,28 +74,21 @@ class CompletedWindowSkipTest {
     }
 
     @Test
-    fun `the offset lands inside the window`() {
+    fun `the drawn time lands inside the window`() {
         // Guards the registration time itself, not just the skip decision.
         for (window in listOf(morning, afternoon)) {
-            val open = window.openTime.minuteOfDay()
-            val close = window.closeTime.minuteOfDay()
-            val latestUseful = close - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
-            val target = (open + 30).coerceAtMost(latestUseful.coerceAtLeast(open))
-
-            assertTrue(target >= open, "${window.name} target before open")
-            assertTrue(target < close, "${window.name} target after close")
+            repeat(200) {
+                val drawn = RandomWindowTime.draw(window)
+                assertTrue(drawn != null, "${window.name} produced no time")
+                assertTrue(
+                    drawn.minuteOfDay() >= window.openTime.minuteOfDay(),
+                    "${window.name} drew $drawn before open"
+                )
+                assertTrue(
+                    drawn.minuteOfDay() < window.closeTime.minuteOfDay(),
+                    "${window.name} drew $drawn after close"
+                )
+            }
         }
-    }
-
-    @Test
-    fun `a window too short for the offset still lands inside it`() {
-        val brief = SurveyWindow("brief", LocalTime(9, 0), LocalTime(9, 20), 3)
-        val open = brief.openTime.minuteOfDay()
-        val close = brief.closeTime.minuteOfDay()
-        val latestUseful = close - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
-        val target = (open + 30).coerceAtMost(latestUseful.coerceAtLeast(open))
-
-        assertEquals(open, target, "should clamp back to the open time")
-        assertTrue(target < close)
     }
 }

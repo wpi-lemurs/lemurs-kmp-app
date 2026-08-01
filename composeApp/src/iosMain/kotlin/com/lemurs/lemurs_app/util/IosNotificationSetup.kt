@@ -1,17 +1,25 @@
 package com.lemurs.lemurs_app.util
 
 import co.touchlab.kermit.Logger
+import com.lemurs.lemurs_app.data.datastore.NotificationTimesImpl
+import com.lemurs.lemurs_app.survey.SurveyWindow
 import com.lemurs.lemurs_app.survey.SurveyWindows
 import com.lemurs.lemurs_app.survey.fetchSurveyStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSTimeZone
 import platform.Foundation.dateWithTimeIntervalSince1970
 import platform.Foundation.systemTimeZone
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 /**
  * Registers iOS notifications against the survey windows the server reports.
@@ -24,14 +32,14 @@ import platform.Foundation.systemTimeZone
  * with [cancelForCompletedWindow] is what stops a participant being reminded about a survey they
  * have already done.
  *
- * The time within a window is a fixed offset rather than randomised per day, since iOS cannot run
- * code each morning to re-plan.
+ * The time within each window is random, so participants are not all nudged at the same instant and
+ * do not settle into answering at a fixed time. iOS cannot wake before dawn to draw one, so the
+ * draw happens while the app is open and is stored per date: the next day's time is chosen today,
+ * and re-opening the app reuses it rather than moving a notification that is already pending.
  */
-object IosNotificationSetup {
+object IosNotificationSetup : KoinComponent {
     private val logger = Logger.withTag("IosNotificationSetup")
-
-    /** How far into a window its notification fires, when the window is long enough. */
-    private const val OFFSET_INTO_WINDOW_MINUTES = 30
+    private val notificationTimes: NotificationTimesImpl by inject()
 
     fun refreshFromServer() {
         CoroutineScope(Dispatchers.Main).launch {
@@ -58,34 +66,42 @@ object IosNotificationSetup {
             // Registrations are one-shot, so this is also what re-arms tomorrow.
             scheduler.clearWindowNotifications(usable.map { it.name })
 
-            val nowLocalTime = SurveyWindows.nowLocalTime()
+            val zone = SurveyWindows.systemZone()
+            val today = SurveyWindows.localDate(zone = zone)
+            val tomorrow = today.plus(1, DateTimeUnit.DAY)
+            val nowLocalTime = SurveyWindows.nowLocalTime(zone = zone)
 
             for (window in usable) {
-                val open = window.openTime.minuteOfDay()
-                val close = window.closeTime.minuteOfDay()
+                val completedToday = window.name in status.completedWindows
 
-                // Keep the whole reminder set inside the window where possible,
-                // and never schedule past the close.
-                val latestUseful = close - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
-                val target = (open + OFFSET_INTO_WINDOW_MINUTES).coerceAtMost(
-                    latestUseful.coerceAtLeast(open)
-                )
+                // Today's slot, if one is still worth using. Skipped once the
+                // survey is done, and null when too little of the window is left.
+                val todaysTime =
+                    if (completedToday) null
+                    else plannedTime(window, today, notBefore = nowLocalTime)
 
-                // A window already submitted today needs no notification, but only
-                // if the slot is still ahead of us. Once it has passed, the next
-                // occurrence is tomorrow, which the participant has not done yet.
-                val slotStillToday = target > nowLocalTime.minuteOfDay()
-                if (slotStillToday && window.name in status.completedWindows) {
-                    logger.w("Skipping '${window.name}': already submitted today")
+                if (todaysTime != null) {
+                    scheduler.scheduleInitialNotificationOn(window.name, todaysTime, today)
+                    logger.w("'${window.name}' notification at $todaysTime today")
                     continue
                 }
 
-                scheduler.scheduleInitialNotification(
-                    window.name,
-                    LocalTime.fromMinuteOfDay(target),
-                    forceToday = false
-                )
+                // Otherwise aim at tomorrow, drawing from the whole window since
+                // nothing has passed yet. Drawing now, while the app is open, is
+                // what lets iOS randomise at all -- it cannot wake tomorrow to do it.
+                val tomorrowsTime = plannedTime(window, tomorrow, notBefore = null)
+                if (tomorrowsTime == null) {
+                    logger.w("No usable notification time for '${window.name}'")
+                    continue
+                }
+                scheduler.scheduleInitialNotificationOn(window.name, tomorrowsTime, tomorrow)
+                logger.w("'${window.name}' notification at $tomorrowsTime tomorrow")
             }
+
+            // Yesterday's draws are no longer reachable; keep only what is in use.
+            notificationTimes.prunePlannedWindowTimes(
+                setOf(today.toString(), tomorrow.toString())
+            )
 
             status.weeklyNextAvailable?.let { instant ->
                 val date = NSDate.dateWithTimeIntervalSince1970(
@@ -96,6 +112,37 @@ object IosNotificationSetup {
 
             logger.w("Registered notifications for ${usable.size} window(s) in ${SurveyWindows.systemZone().id}")
         }
+    }
+
+    /**
+     * The notification time for [window] on [date], drawn once and then reused.
+     *
+     * Reusing the stored draw is what keeps a pending notification still: re-opening the app would
+     * otherwise re-roll and move it. A time already stored is returned even if it now falls before
+     * [notBefore], since that notification has already fired or is imminent — the caller moves on
+     * to the next day rather than drawing a replacement.
+     *
+     * Returns null when the window has too little time left to be worth a nudge.
+     */
+    private suspend fun plannedTime(
+        window: SurveyWindow,
+        date: LocalDate,
+        notBefore: LocalTime?
+    ): LocalTime? {
+        val key = date.toString()
+        val stored = notificationTimes.getPlannedWindowTime(window.name, key).first()
+        if (stored.isNotEmpty()) {
+            val parsed = runCatching { LocalTime.parse(stored) }.getOrNull()
+            if (parsed != null) {
+                // Only usable if it is still ahead of us on the day in question.
+                return if (notBefore == null || parsed > notBefore) parsed else null
+            }
+            logger.w("Ignoring unparseable stored time '$stored' for '${window.name}'")
+        }
+
+        val drawn = RandomWindowTime.draw(window, notBefore) ?: return null
+        notificationTimes.updatePlannedWindowTime(window.name, key, drawn.toString())
+        return drawn
     }
 
     /**

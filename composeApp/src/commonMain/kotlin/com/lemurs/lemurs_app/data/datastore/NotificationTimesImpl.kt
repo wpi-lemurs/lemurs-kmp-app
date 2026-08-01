@@ -15,6 +15,20 @@ interface NotificationTimesInterface {
     fun getWindowTime(windowName: String): Flow<String>
     fun getDate(): Flow<String>
     fun getCachedWindows(): Flow<String>
+
+    /**
+     * Records the time chosen for [windowName] on [localDate], as "HH:MM".
+     *
+     * Drawn once and reused, so re-opening the app does not move a notification that is already
+     * pending.
+     */
+    suspend fun updatePlannedWindowTime(windowName: String, localDate: String, atLocalTime: String)
+
+    /** The time chosen for [windowName] on [localDate], or empty if none has been drawn. */
+    fun getPlannedWindowTime(windowName: String, localDate: String): Flow<String>
+
+    /** Drops planned times for dates other than those given, so the map cannot grow forever. */
+    suspend fun prunePlannedWindowTimes(keepDates: Set<String>)
 }
 
 /**
@@ -47,4 +61,35 @@ class NotificationTimesImpl(private val dataStore: DataStore<NotificationTimes>)
     override fun getDate(): Flow<String> = dataStore.data.map { it.date }
 
     override fun getCachedWindows(): Flow<String> = dataStore.data.map { it.cachedWindows }
+
+    override suspend fun updatePlannedWindowTime(
+        windowName: String,
+        localDate: String,
+        atLocalTime: String
+    ) {
+        dataStore.updateData { current ->
+            current.copy(
+                plannedWindowTimes =
+                    current.plannedWindowTimes + (plannedKey(windowName, localDate) to atLocalTime)
+            )
+        }
+    }
+
+    override fun getPlannedWindowTime(windowName: String, localDate: String): Flow<String> =
+        dataStore.data.map { it.plannedWindowTimes[plannedKey(windowName, localDate)] ?: "" }
+
+    override suspend fun prunePlannedWindowTimes(keepDates: Set<String>) {
+        dataStore.updateData { current ->
+            current.copy(
+                plannedWindowTimes = current.plannedWindowTimes.filterKeys { key ->
+                    key.substringAfterLast('@', "") in keepDates
+                }
+            )
+        }
+    }
+
+    private companion object {
+        /** Window names cannot contain '@', so the date is recoverable from the key. */
+        fun plannedKey(windowName: String, localDate: String) = "$windowName@$localDate"
+    }
 }

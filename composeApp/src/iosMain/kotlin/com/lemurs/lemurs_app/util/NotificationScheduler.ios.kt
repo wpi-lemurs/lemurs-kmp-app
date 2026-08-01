@@ -3,6 +3,7 @@ package com.lemurs.lemurs_app.util
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.survey.SurveyWindows
 import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.plus
 import platform.Foundation.NSCalendar
@@ -36,8 +37,7 @@ import platform.UserNotifications.UNUserNotificationCenter
  * Because iOS delivers these without consulting the app, completion is handled by cancelling at
  * submission rather than by checking at delivery time the way Android does.
  *
- * The time within a window is a fixed offset rather than randomised per day, since randomising
- * would need code to run each morning.
+ * The time within a window is drawn at random by [IosNotificationSetup] and passed in here.
  */
 actual class NotificationScheduler actual constructor() {
     private val logger = Logger.withTag("NotificationScheduler")
@@ -66,6 +66,19 @@ actual class NotificationScheduler actual constructor() {
         windowName: String,
         atLocalTime: LocalTime,
         forceToday: Boolean
+    ) = scheduleInitialNotificationOn(windowName, atLocalTime, onDate = null)
+
+    /**
+     * Registers [windowName]'s nudge for [atLocalTime] on [onDate].
+     *
+     * The date is explicit because the time is drawn per day and stored: "the next occurrence of
+     * 09:41" would be ambiguous once today's and tomorrow's draws differ. Passing null falls back
+     * to the next occurrence, which suits a fixed time.
+     */
+    fun scheduleInitialNotificationOn(
+        windowName: String,
+        atLocalTime: LocalTime,
+        onDate: LocalDate?
     ) {
         val center = UNUserNotificationCenter.currentNotificationCenter()
         val identifier = initialIdentifier(windowName)
@@ -77,7 +90,9 @@ actual class NotificationScheduler actual constructor() {
             setSound(UNNotificationSound.defaultSound())
         }
 
-        val components = nextOccurrenceComponents(atLocalTime)
+        val components =
+            if (onDate == null) nextOccurrenceComponents(atLocalTime)
+            else componentsFor(onDate, atLocalTime)
 
         center.addNotificationRequest(
             UNNotificationRequest.requestWithIdentifier(
@@ -97,12 +112,18 @@ actual class NotificationScheduler actual constructor() {
     }
 
     /**
-     * Date components for the next time the clock reads [atLocalTime], today or tomorrow.
+     * Date components naming one exact local date and time.
      *
-     * Year, month and day are included so the trigger fires once rather than daily. Built from the
-     * calendar rather than by adding 24 hours, so a daylight saving transition still lands on the
-     * right wall-clock time.
+     * Year, month and day are included so the trigger fires once rather than daily.
      */
+    private fun componentsFor(date: LocalDate, atLocalTime: LocalTime) = NSDateComponents().apply {
+        year = date.year.toLong()
+        month = date.monthNumber.toLong()
+        day = date.dayOfMonth.toLong()
+        hour = atLocalTime.hour.toLong()
+        minute = atLocalTime.minute.toLong()
+    }
+
     private fun nextOccurrenceComponents(atLocalTime: LocalTime): NSDateComponents {
         val zone = SurveyWindows.systemZone()
         val today = SurveyWindows.localDate(zone = zone)
@@ -114,13 +135,7 @@ actual class NotificationScheduler actual constructor() {
         val targetDate =
             if (atLocalTime > nowLocal) today else today.plus(1, DateTimeUnit.DAY)
 
-        return NSDateComponents().apply {
-            year = targetDate.year.toLong()
-            month = targetDate.monthNumber.toLong()
-            day = targetDate.dayOfMonth.toLong()
-            hour = atLocalTime.hour.toLong()
-            minute = atLocalTime.minute.toLong()
-        }
+        return componentsFor(targetDate, atLocalTime)
     }
 
     /** Sends a single last call shortly from now, with no repeat. */

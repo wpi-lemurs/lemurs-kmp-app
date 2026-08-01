@@ -16,4 +16,16 @@ message NotificationTimes {
       // before dawn when connectivity is least reliable; this is what lets it
       // still plan a schedule after a night with no network.
       string cachedWindows = 5;
+
+      // The randomly chosen notification time for each window, keyed by
+      // "<window name>@<local date>" and held as "HH:MM".
+      //
+      // Distinct from windowTimes above, which records when a notification was
+      // actually sent. This records when one is *planned* to be sent, so that
+      // re-opening the app during the day re-registers the same time rather than
+      // drawing a new one and moving a pending notification around.
+      //
+      // Only iOS uses this. Android re-plans from an alarm each morning and so
+      // draws its time once per day without needing to persist it.
+      map<string, string> plannedWindowTimes = 6;
 }
