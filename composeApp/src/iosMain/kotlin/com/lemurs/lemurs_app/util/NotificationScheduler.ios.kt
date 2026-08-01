@@ -159,6 +159,14 @@ actual class NotificationScheduler actual constructor() {
         }
     }
 
+    /**
+     * Schedules a reminder [delayMinutes] from now.
+     *
+     * Retained for the shared signature. iOS registers its notifications ahead of time rather than
+     * when the nudge fires, so [scheduleReminderOn] is what actually gets used: a delay measured
+     * from *now* would put the reminder an hour after registration rather than an hour after the
+     * notification it follows.
+     */
     actual fun scheduleReminder(
         windowName: String,
         delayMinutes: Long,
@@ -183,6 +191,42 @@ actual class NotificationScheduler actual constructor() {
         ) { error ->
             if (error != null) {
                 logger.e("Failed to schedule '$windowName' reminder: ${error.localizedDescription}")
+            }
+        }
+    }
+
+    /** Schedules a reminder for an exact local date and time. */
+    fun scheduleReminderOn(
+        windowName: String,
+        onDate: LocalDate,
+        atLocalTime: LocalTime,
+        title: String,
+        body: String,
+        isFinal: Boolean
+    ) {
+        val identifier = reminderIdentifier(windowName, isFinal)
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        center.removePendingNotificationRequestsWithIdentifiers(listOf(identifier))
+
+        val content = UNMutableNotificationContent().apply {
+            setTitle(title)
+            setBody(body)
+            setSound(UNNotificationSound.defaultSound())
+        }
+
+        center.addNotificationRequest(
+            UNNotificationRequest.requestWithIdentifier(
+                identifier = identifier,
+                content = content,
+                trigger = UNCalendarNotificationTrigger.triggerWithDateMatchingComponents(
+                    componentsFor(onDate, atLocalTime), false
+                )
+            )
+        ) { error ->
+            if (error != null) {
+                logger.e("Failed to schedule '$windowName' reminder: ${error.localizedDescription}")
+            } else {
+                logger.w("Scheduled '$windowName' ${if (isFinal) "final" else "first"} reminder for $atLocalTime")
             }
         }
     }

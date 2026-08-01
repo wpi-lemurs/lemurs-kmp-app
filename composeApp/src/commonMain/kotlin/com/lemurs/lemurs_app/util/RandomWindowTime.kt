@@ -35,8 +35,10 @@ object RandomWindowTime {
         val open = window.openTime.minuteOfDay()
         val close = window.closeTime.minuteOfDay()
 
-        // Keep the full reminder set inside the window where it fits.
-        val latestStart = close - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
+        // Keep the full reminder set inside the window where it fits. Strictly
+        // inside: a draw at exactly close-105 puts the final reminder on the
+        // close itself, where the participant can no longer act on it.
+        val latestStart = close - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt() - 1
 
         val earliest = maxOf(open, notBefore?.minuteOfDay() ?: open)
         val latest = maxOf(latestStart, open)

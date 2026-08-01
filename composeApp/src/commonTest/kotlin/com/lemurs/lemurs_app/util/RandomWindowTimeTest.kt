@@ -17,15 +17,18 @@ class RandomWindowTimeTest {
     @Test
     fun `a drawn time always leaves room for both reminders`() {
         // The whole point of bounding the draw: a notification at 12:55 would put
-        // its final reminder after the window had closed.
-        val latestAcceptable =
-            morning.closeTime.minuteOfDay() - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
+        // its final reminder after the window had closed. The bound is strict, so
+        // the final reminder lands before the close rather than on it.
+        val close = morning.closeTime.minuteOfDay()
 
         repeat(2000) {
             val drawn = assertNotNull(RandomWindowTime.draw(morning))
             val minute = drawn.minuteOfDay()
             assertTrue(minute >= morning.openTime.minuteOfDay(), "drew $drawn before open")
-            assertTrue(minute <= latestAcceptable, "drew $drawn too late for reminders")
+            assertTrue(
+                minute + NotificationPlanner.FINAL_REMINDER_MINUTES < close,
+                "drew $drawn, whose final reminder is not before the close"
+            )
         }
     }
 
@@ -42,9 +45,9 @@ class RandomWindowTimeTest {
         val seen = List(5000) { RandomWindowTime.draw(morning)!!.minuteOfDay() }
         val open = morning.openTime.minuteOfDay()
         val latest =
-            morning.closeTime.minuteOfDay() - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt()
+            morning.closeTime.minuteOfDay() - NotificationPlanner.FINAL_REMINDER_MINUTES.toInt() - 1
 
-        // Both ends inclusive, so 08:00 and 11:15 can both be chosen.
+        // Both ends inclusive, so 08:00 and 11:14 can both be chosen.
         assertEquals(open, seen.min(), "the open time should be reachable")
         assertEquals(latest, seen.max(), "the latest usable time should be reachable")
     }

@@ -32,6 +32,10 @@ import org.koin.core.component.inject
  * with [cancelForCompletedWindow] is what stops a participant being reminded about a survey they
  * have already done.
  *
+ * Each window gets three notifications, matching Android: an opening nudge and two reminders at
+ * +60 and +105 minutes. All three are registered together, since iOS cannot schedule the reminders
+ * when the nudge fires the way Android does.
+ *
  * The time within each window is random, so participants are not all nudged at the same instant and
  * do not settle into answering at a fixed time. iOS cannot wake before dawn to draw one, so the
  * draw happens while the app is open and is stored per date: the next day's time is chosen today,
@@ -81,8 +85,7 @@ object IosNotificationSetup : KoinComponent {
                     else plannedTime(window, today, notBefore = nowLocalTime)
 
                 if (todaysTime != null) {
-                    scheduler.scheduleInitialNotificationOn(window.name, todaysTime, today)
-                    logger.w("'${window.name}' notification at $todaysTime today")
+                    registerWindow(scheduler, window, today, todaysTime)
                     continue
                 }
 
@@ -94,8 +97,7 @@ object IosNotificationSetup : KoinComponent {
                     logger.w("No usable notification time for '${window.name}'")
                     continue
                 }
-                scheduler.scheduleInitialNotificationOn(window.name, tomorrowsTime, tomorrow)
-                logger.w("'${window.name}' notification at $tomorrowsTime tomorrow")
+                registerWindow(scheduler, window, tomorrow, tomorrowsTime)
             }
 
             // Yesterday's draws are no longer reachable; keep only what is in use.
@@ -111,6 +113,53 @@ object IosNotificationSetup : KoinComponent {
             }
 
             logger.w("Registered notifications for ${usable.size} window(s) in ${SurveyWindows.systemZone().id}")
+        }
+    }
+
+    /**
+     * Registers the nudge and its two reminders for one window on one date.
+     *
+     * All three are registered together, because iOS has no way to schedule the reminders when the
+     * nudge fires the way Android does — nothing of ours runs at that moment. Their times are fixed
+     * offsets from the nudge, so they follow the random draw automatically.
+     *
+     * A reminder falling at or past the close is dropped rather than clamped onto it: a reminder
+     * arriving exactly as the window shuts is noise, and the participant can no longer act on it.
+     */
+    private fun registerWindow(
+        scheduler: NotificationScheduler,
+        window: SurveyWindow,
+        date: LocalDate,
+        atLocalTime: LocalTime
+    ) {
+        scheduler.scheduleInitialNotificationOn(window.name, atLocalTime, date)
+        logger.w("'${window.name}' notification at $atLocalTime on $date")
+
+        val close = window.closeTime.minuteOfDay()
+        val start = atLocalTime.minuteOfDay()
+
+        val reminders = listOf(
+            NotificationPlanner.FIRST_REMINDER_MINUTES to false,
+            NotificationPlanner.FINAL_REMINDER_MINUTES to true
+        )
+
+        for ((delay, isFinal) in reminders) {
+            val at = start + delay.toInt()
+            if (at >= close) {
+                logger.w("Dropping '${window.name}' ${if (isFinal) "final" else "first"} reminder: past close")
+                continue
+            }
+            val label = if (isFinal) "Last Reminder" else "Reminder"
+            val body =
+                if (isFinal) "This is your last reminder. $REWARD_BODY" else REWARD_BODY
+            scheduler.scheduleReminderOn(
+                windowName = window.name,
+                onDate = date,
+                atLocalTime = LocalTime.fromMinuteOfDay(at),
+                title = "$label: Please take your ${window.name} survey!",
+                body = body,
+                isFinal = isFinal
+            )
         }
     }
 
@@ -157,4 +206,6 @@ object IosNotificationSetup : KoinComponent {
     fun cancelForCompletedWindow(windowName: String) {
         NotificationScheduler().cancelNotificationsFor(windowName)
     }
+
+    private const val REWARD_BODY = "Remember you can earn \$3 for completing this survey."
 }
