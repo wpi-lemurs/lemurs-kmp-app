@@ -125,7 +125,7 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
         val answerValue = normalizedAnswer.toIntOrNull() ?: return false
         val threshold =
             dangerAlertTriggerThresholds.value[question.id] ?: question.resolvedTriggerThreshold
-        val returnVal = threshold != null && answerValue >= (threshold - 1)
+        val returnVal = threshold != null && answerValue >= (threshold)
         logger.w("Trigger alert value $returnVal for question: $question with answer: $answerValue")
         return returnVal
     }
