@@ -81,7 +81,7 @@ actual class NotificationScheduler actual constructor() {
         onDate: LocalDate?
     ) {
         val center = UNUserNotificationCenter.currentNotificationCenter()
-        val identifier = initialIdentifier(windowName)
+        val identifier = initialIdentifier(windowName, onDate)
         center.removePendingNotificationRequestsWithIdentifiers(listOf(identifier))
 
         val content = UNMutableNotificationContent().apply {
@@ -106,7 +106,7 @@ actual class NotificationScheduler actual constructor() {
             if (error != null) {
                 logger.e("Failed to schedule '$windowName': ${error.localizedDescription}")
             } else {
-                logger.w("Scheduled '$windowName' notification for the next $atLocalTime")
+                logger.w("Scheduled '$windowName' notification for $atLocalTime on ${onDate ?: "next occurrence"}")
             }
         }
     }
@@ -182,7 +182,7 @@ actual class NotificationScheduler actual constructor() {
 
         UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(
             UNNotificationRequest.requestWithIdentifier(
-                identifier = reminderIdentifier(windowName, isFinal),
+                identifier = reminderIdentifier(windowName, isFinal, onDate = null),
                 content = content,
                 trigger = UNTimeIntervalNotificationTrigger.triggerWithTimeInterval(
                     (delayMinutes * 60).toDouble(), false
@@ -204,7 +204,7 @@ actual class NotificationScheduler actual constructor() {
         body: String,
         isFinal: Boolean
     ) {
-        val identifier = reminderIdentifier(windowName, isFinal)
+        val identifier = reminderIdentifier(windowName, isFinal, onDate)
         val center = UNUserNotificationCenter.currentNotificationCenter()
         center.removePendingNotificationRequestsWithIdentifiers(listOf(identifier))
 
@@ -226,7 +226,7 @@ actual class NotificationScheduler actual constructor() {
             if (error != null) {
                 logger.e("Failed to schedule '$windowName' reminder: ${error.localizedDescription}")
             } else {
-                logger.w("Scheduled '$windowName' ${if (isFinal) "final" else "first"} reminder for $atLocalTime")
+                logger.w("Scheduled '$windowName' ${if (isFinal) "final" else "first"} reminder for $atLocalTime on $onDate")
             }
         }
     }
@@ -295,25 +295,49 @@ actual class NotificationScheduler actual constructor() {
     }
 
     /**
-     * Cancels every pending notification for one window.
+     * Cancels pending notifications for one window on [onDate].
      *
      * Called when the participant submits that window's survey, so they are not reminded to do
-     * something they have already done. Safe when nothing is pending.
-     *
-     * Only affects the current occurrence: [IosNotificationSetup] re-registers the next one when
-     * the app is next foregrounded, so cancelling today does not silence the window permanently.
+     * something they have already done. Defaults to today's date so future days' notifications remain armed.
      */
-    fun cancelNotificationsFor(windowName: String) {
-        UNUserNotificationCenter.currentNotificationCenter()
-            .removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName))
-        logger.w("Cancelled pending '$windowName' notifications after submission")
+    fun cancelNotificationsFor(
+        windowName: String,
+        onDate: LocalDate? = SurveyWindows.localDate()
+    ) {
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        if (onDate != null) {
+            center.removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName, onDate))
+            logger.w("Cancelled pending '$windowName' notifications for $onDate after submission")
+        } else {
+            // If date is null, clear non-dated identifiers for backward compatibility
+            center.removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName, null))
+            logger.w("Cancelled pending '$windowName' notifications after submission")
+        }
     }
 
-    /** Clears every pending survey notification for [windowNames], before re-registering them. */
+    /** Clears pending survey notifications for [windowNames] across nearby dates before re-registering. */
     fun clearWindowNotifications(windowNames: List<String>) {
+        val zone = SurveyWindows.systemZone()
+        val today = SurveyWindows.localDate(zone = zone)
+        val dates = listOf(
+            today.plus(-1, DateTimeUnit.DAY),
+            today,
+            today.plus(1, DateTimeUnit.DAY),
+            today.plus(2, DateTimeUnit.DAY),
+            today.plus(3, DateTimeUnit.DAY)
+        )
+        clearWindowNotificationsForDates(windowNames, dates)
+    }
+
+    /** Clears pending notifications for [windowNames] specifically on [dates]. */
+    fun clearWindowNotificationsForDates(windowNames: List<String>, dates: List<LocalDate>) {
+        val datedIdentifiers = windowNames.flatMap { window ->
+            dates.flatMap { date -> identifiersFor(window, date) }
+        }
+        val nonDatedIdentifiers = windowNames.flatMap { window -> identifiersFor(window, null) }
         UNUserNotificationCenter.currentNotificationCenter()
             .removePendingNotificationRequestsWithIdentifiers(
-                windowNames.flatMap(::identifiersFor) + LEGACY_IDENTIFIERS
+                datedIdentifiers + nonDatedIdentifiers + LEGACY_IDENTIFIERS
             )
     }
 
@@ -330,16 +354,22 @@ actual class NotificationScheduler actual constructor() {
          */
         val LEGACY_IDENTIFIERS = listOf("morningSurvey", "afternoonSurvey")
 
-        fun initialIdentifier(windowName: String) = "initial-$windowName"
-        fun reminderIdentifier(windowName: String, isFinal: Boolean) =
-            if (isFinal) "finalReminder-$windowName" else "firstReminder-$windowName"
+        fun initialIdentifier(windowName: String, onDate: LocalDate?) =
+            if (onDate == null) "initial-$windowName" else "initial-$windowName-$onDate"
 
-        /** Every identifier one window can have pending. */
-        fun identifiersFor(windowName: String) = listOf(
-            initialIdentifier(windowName),
-            reminderIdentifier(windowName, isFinal = false),
-            reminderIdentifier(windowName, isFinal = true),
-            "lastChance-$windowName"
+        fun reminderIdentifier(windowName: String, isFinal: Boolean, onDate: LocalDate?) =
+            if (onDate == null) {
+                if (isFinal) "finalReminder-$windowName" else "firstReminder-$windowName"
+            } else {
+                if (isFinal) "finalReminder-$windowName-$onDate" else "firstReminder-$windowName-$onDate"
+            }
+
+        /** Every identifier one window can have pending on a specific date. */
+        fun identifiersFor(windowName: String, onDate: LocalDate?) = listOf(
+            initialIdentifier(windowName, onDate),
+            reminderIdentifier(windowName, isFinal = false, onDate = onDate),
+            reminderIdentifier(windowName, isFinal = true, onDate = onDate),
+            if (onDate == null) "lastChance-$windowName" else "lastChance-$windowName-$onDate"
         )
     }
 }

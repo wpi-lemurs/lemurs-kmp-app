@@ -67,42 +67,41 @@ object IosNotificationSetup : KoinComponent {
             }
 
             // Clear everything first, then re-register only what is still needed.
-            // Registrations are one-shot, so this is also what re-arms tomorrow.
-            scheduler.clearWindowNotifications(usable.map { it.name })
-
             val zone = SurveyWindows.systemZone()
             val today = SurveyWindows.localDate(zone = zone)
-            val tomorrow = today.plus(1, DateTimeUnit.DAY)
+            val candidateDates = listOf(
+                today,
+                today.plus(1, DateTimeUnit.DAY),
+                today.plus(2, DateTimeUnit.DAY)
+            )
             val nowLocalTime = SurveyWindows.nowLocalTime(zone = zone)
+
+            // Clear legacy non-dated notifications as well as existing notifications for candidate dates
+            scheduler.clearWindowNotificationsForDates(usable.map { it.name }, candidateDates)
 
             for (window in usable) {
                 val completedToday = window.name in status.completedWindows
 
-                // Today's slot, if one is still worth using. Skipped once the
-                // survey is done, and null when too little of the window is left.
-                val todaysTime =
-                    if (completedToday) null
-                    else plannedTime(window, today, notBefore = nowLocalTime)
+                for (date in candidateDates) {
+                    val isToday = (date == today)
+                    if (isToday && completedToday) {
+                        // Today's slot is skipped if already completed
+                        continue
+                    }
 
-                if (todaysTime != null) {
-                    registerWindow(scheduler, window, today, todaysTime)
-                    continue
+                    val notBefore = if (isToday) nowLocalTime else null
+                    val windowTime = plannedTime(window, date, notBefore = notBefore)
+                    if (windowTime != null) {
+                        registerWindow(scheduler, window, date, windowTime)
+                    } else {
+                        logger.w("No usable notification time for '${window.name}' on $date")
+                    }
                 }
-
-                // Otherwise aim at tomorrow, drawing from the whole window since
-                // nothing has passed yet. Drawing now, while the app is open, is
-                // what lets iOS randomise at all -- it cannot wake tomorrow to do it.
-                val tomorrowsTime = plannedTime(window, tomorrow, notBefore = null)
-                if (tomorrowsTime == null) {
-                    logger.w("No usable notification time for '${window.name}'")
-                    continue
-                }
-                registerWindow(scheduler, window, tomorrow, tomorrowsTime)
             }
 
-            // Yesterday's draws are no longer reachable; keep only what is in use.
+            // Keep planned window times for candidate dates, prune older ones
             notificationTimes.prunePlannedWindowTimes(
-                setOf(today.toString(), tomorrow.toString())
+                candidateDates.map { it.toString() }.toSet()
             )
 
             status.weeklyNextAvailable?.let { instant ->
@@ -112,7 +111,7 @@ object IosNotificationSetup : KoinComponent {
                 scheduler.scheduleWeeklySurveyNotificationAt(date)
             }
 
-            logger.w("Registered notifications for ${usable.size} window(s) in ${SurveyWindows.systemZone().id}")
+            logger.w("Registered 3-day notifications for ${usable.size} window(s) in ${SurveyWindows.systemZone().id}")
         }
     }
 

@@ -1,7 +1,10 @@
 package com.lemurs.lemurs_app.util
 
 import com.lemurs.lemurs_app.survey.SurveyWindow
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,6 +74,62 @@ class CompletedWindowSkipTest {
         assertFalse(
             shouldSkip(afternoon, LocalTime(15, 30), LocalTime(15, 30), listOf("afternoon"))
         )
+    }
+
+    @Test
+    fun `three-day candidate dates generate consecutive days starting from today`() {
+        val today = kotlinx.datetime.LocalDate(2026, 6, 1)
+        val candidateDates = listOf(
+            today,
+            today.plus(1, kotlinx.datetime.DateTimeUnit.DAY),
+            today.plus(2, kotlinx.datetime.DateTimeUnit.DAY)
+        )
+        assertEquals(3, candidateDates.size)
+        assertEquals(kotlinx.datetime.LocalDate(2026, 6, 1), candidateDates[0])
+        assertEquals(kotlinx.datetime.LocalDate(2026, 6, 2), candidateDates[1])
+        assertEquals(kotlinx.datetime.LocalDate(2026, 6, 3), candidateDates[2])
+    }
+
+    @Test
+    fun `completing today window skips today but arms tomorrow and day after tomorrow`() {
+        val today = kotlinx.datetime.LocalDate(2026, 6, 1)
+        val candidateDates = listOf(
+            today,
+            today.plus(1, kotlinx.datetime.DateTimeUnit.DAY),
+            today.plus(2, kotlinx.datetime.DateTimeUnit.DAY)
+        )
+        val completedWindows = listOf("morning")
+
+        val scheduledDates = candidateDates.filterNot { date ->
+            date == today && "morning" in completedWindows
+        }
+
+        assertEquals(2, scheduledDates.size)
+        assertEquals(kotlinx.datetime.LocalDate(2026, 6, 2), scheduledDates[0])
+        assertEquals(kotlinx.datetime.LocalDate(2026, 6, 3), scheduledDates[1])
+    }
+
+    @Test
+    fun `late-day launch arms tomorrow and day after tomorrow for all windows`() {
+        val today = kotlinx.datetime.LocalDate(2026, 6, 1)
+        val candidateDates = listOf(
+            today,
+            today.plus(1, kotlinx.datetime.DateTimeUnit.DAY),
+            today.plus(2, kotlinx.datetime.DateTimeUnit.DAY)
+        )
+        val nowLocalTime = LocalTime(21, 0) // After all windows close
+
+        for (window in listOf(morning, afternoon)) {
+            val validDates = candidateDates.mapNotNull { date ->
+                val notBefore = if (date == today) nowLocalTime else null
+                val drawn = RandomWindowTime.draw(window, notBefore = notBefore)
+                if (drawn != null) date to drawn else null
+            }
+            // Today returns null because 21:00 is after close, but tomorrow and day 3 draw valid times
+            assertEquals(2, validDates.size, "Window ${window.name} should have 2 valid future dates")
+            assertEquals(kotlinx.datetime.LocalDate(2026, 6, 2), validDates[0].first)
+            assertEquals(kotlinx.datetime.LocalDate(2026, 6, 3), validDates[1].first)
+        }
     }
 
     @Test
