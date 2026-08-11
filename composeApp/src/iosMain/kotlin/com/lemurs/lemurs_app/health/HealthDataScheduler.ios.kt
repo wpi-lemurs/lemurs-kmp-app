@@ -66,6 +66,12 @@ actual class HealthDataScheduler {
         bridge.performImmediateSync()
     }
 
+    actual fun cancelAll() {
+        logger.i("Cancelling background tasks & stopping passive collection on iOS")
+        disablePassiveCollection()
+        IOSHealthDataSchedulerProvider.bridge?.cancelScheduledTasks()
+    }
+
     /**
      * Enable passive background health data collection.
      * This sets up observer queries that will be triggered when new health data

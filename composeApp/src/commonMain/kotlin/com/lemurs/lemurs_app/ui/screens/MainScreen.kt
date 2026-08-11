@@ -44,6 +44,8 @@ import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
 import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
 import com.lemurs.lemurs_app.getPlatform
+import com.lemurs.lemurs_app.health.HealthDataScheduler
+import com.lemurs.lemurs_app.survey.SurveyWindowState
 import org.koin.compose.viewmodel.koinViewModel
 
 // Platform-specific expect declaration for iOS notification scheduling
@@ -77,6 +79,15 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
         }
     }
 
+    val currentDailyState = dailyState
+
+    LaunchedEffect(currentDailyState) {
+        if (currentDailyState is SurveyWindowState.StudyConcluded) {
+            logger.w { "Study has concluded. Cancelling background collection." }
+            HealthDataScheduler().cancelAll()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.padding(16.dp))
         Column(
@@ -84,36 +95,53 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = "Daily Survey",
-                style = MaterialTheme.typography.titleLarge,
-                color = LemurDarkestGrey,
-            )
-            val currentDailyState = dailyState
-            if (currentDailyState == null) {
-                CircularProgressIndicator()
+            if (currentDailyState is SurveyWindowState.StudyConcluded) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "The survey period has concluded, you may close the app now, thank you for your participation.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = LemurDarkestGrey,
+                        modifier = Modifier.padding(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             } else {
-                SurveyOpenButton(
-                    onNavigate = { onNavigateTo(LemurScreen.DailyInformation.name) },
-                    state = currentDailyState
+                Text(
+                    text = "Daily Survey",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = LemurDarkestGrey,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                if (currentDailyState == null) {
+                    CircularProgressIndicator()
+                } else {
+                    SurveyOpenButton(
+                        onNavigate = { onNavigateTo(LemurScreen.DailyInformation.name) },
+                        state = currentDailyState
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
-            Text(
-                text = "Weekly Survey",
-                style = MaterialTheme.typography.titleLarge,
-                color = LemurDarkestGrey,
-            )
-            if (surveyStatus == null) {
-                CircularProgressIndicator()
-            } else {
-                WeeklySurveyOpenButton(
-                    onNavigate = { onNavigateTo(LemurScreen.WeeklyInformation.name) },
-                    secondsUntilOpen = timeUntilWeekly
+                val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
+                Text(
+                    text = "Weekly Survey",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = LemurDarkestGrey,
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                if (surveyStatus == null) {
+                    CircularProgressIndicator()
+                } else {
+                    WeeklySurveyOpenButton(
+                        onNavigate = { onNavigateTo(LemurScreen.WeeklyInformation.name) },
+                        secondsUntilOpen = timeUntilWeekly
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))

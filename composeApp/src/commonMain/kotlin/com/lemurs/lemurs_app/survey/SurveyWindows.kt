@@ -46,7 +46,8 @@ data class SurveyStatus(
     val windows: List<SurveyWindow> = emptyList(),
     val completedWindows: List<String> = emptyList(),
     /** The weekly survey is gated on elapsed days, so this genuinely is an instant. */
-    val weeklyNextAvailable: Instant? = null
+    val weeklyNextAvailable: Instant? = null,
+    val studyConcluded: Boolean = false
 )
 
 /** What the participant should be shown for the daily survey right now. */
@@ -63,6 +64,9 @@ sealed interface SurveyWindowState {
 
     /** No window is open. */
     data class Closed(val secondsUntilNextOpen: Long?) : SurveyWindowState
+
+    /** The 28-day study period has concluded. */
+    data object StudyConcluded : SurveyWindowState
 }
 
 /**
@@ -157,7 +161,17 @@ object SurveyWindows {
         completedWindowNames: Collection<String>,
         at: Instant = Clock.System.now(),
         zone: TimeZone = systemZone()
+    ): SurveyWindowState = evaluate(windows, completedWindowNames, false, at, zone)
+
+    fun evaluate(
+        windows: List<SurveyWindow>,
+        completedWindowNames: Collection<String>,
+        studyConcluded: Boolean,
+        at: Instant = Clock.System.now(),
+        zone: TimeZone = systemZone()
     ): SurveyWindowState {
+        if (studyConcluded) return SurveyWindowState.StudyConcluded
+
         val window = currentWindow(windows, at, zone)
             ?: return SurveyWindowState.Closed(secondsUntilNextOpen(windows, at, zone))
 
@@ -167,4 +181,10 @@ object SurveyWindows {
             SurveyWindowState.Open(window, secondsUntilClose(window, at, zone))
         }
     }
+
+    fun evaluate(
+        status: SurveyStatus,
+        at: Instant = Clock.System.now(),
+        zone: TimeZone = systemZone()
+    ): SurveyWindowState = evaluate(status.windows, status.completedWindows, status.studyConcluded, at, zone)
 }

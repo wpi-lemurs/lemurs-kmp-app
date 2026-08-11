@@ -46,4 +46,11 @@ actual class HealthDataScheduler {
 
         workManager.enqueue(request)
     }
+
+    actual fun cancelAll() {
+        logger.w("cancelling background health and bluetooth workers")
+        workManager.cancelUniqueWork("health data schedule")
+        workManager.cancelUniqueWork("collect health schedule")
+        workManager.cancelUniqueWork("collect bluetooth schedule")
+    }
 }

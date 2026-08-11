@@ -60,6 +60,14 @@ fun SurveyOpenButton(onNavigate: () -> Unit, state: SurveyWindowState) {
             enabled = false,
             onClick = {}
         )
+
+        is SurveyWindowState.StudyConcluded -> SurveyButtonLayout(
+            label = "Concluded",
+            countdownSeconds = null,
+            buttonText = "Study Concluded",
+            enabled = false,
+            onClick = {}
+        )
     }
 }
 

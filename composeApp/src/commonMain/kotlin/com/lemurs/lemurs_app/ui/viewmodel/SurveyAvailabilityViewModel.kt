@@ -76,6 +76,7 @@ class SurveyAvailabilityViewModel(
         _dailyState.value = SurveyWindows.evaluate(
             windows = current.windows,
             completedWindowNames = current.completedWindows,
+            studyConcluded = current.studyConcluded,
             at = _now.value
         )
     }

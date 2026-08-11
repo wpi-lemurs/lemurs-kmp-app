@@ -209,4 +209,11 @@ class SurveyWindowsTest {
         assertTrue(morning.isWellFormed)
         assertTrue(afternoon.isWellFormed)
     }
+
+    @Test
+    fun `evaluate returns StudyConcluded when studyConcluded is true`() {
+        val nineAm = at("2026-06-15", LocalTime(9, 0), eastern)
+        val state = SurveyWindows.evaluate(windows, emptyList(), studyConcluded = true, at = nineAm, zone = eastern)
+        assertIs<SurveyWindowState.StudyConcluded>(state)
+    }
 }
