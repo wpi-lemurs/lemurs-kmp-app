@@ -55,9 +55,14 @@ object IosNotificationSetup : KoinComponent {
             // the old fixed schedule indefinitely.
             scheduler.clearLegacyNotifications()
 
-            val status = fetchSurveyStatus()
+            val status = runCatching { fetchSurveyStatus() }.getOrNull()
             if (status == null) {
                 logger.w("Couldn't fetch survey windows; will register on the next launch")
+                return@launch
+            }
+            if (status.studyConcluded) {
+                logger.w("Study is concluded; cancelling all iOS notifications")
+                scheduler.clearLegacyNotifications()
                 return@launch
             }
             val usable = status.windows.filter { it.isWellFormed }

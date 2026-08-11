@@ -94,6 +94,22 @@ class WebAPIAuthorizationService : KoinComponent {
         runBlocking {
             jwtTokenResponse = jwtTokenResponseData.buildJwtTokenResponse()
         }
+        if (jwtTokenResponse.refreshToken.isBlank()) {
+            logger.w("No refresh token available - returning unauthenticated client")
+            return createPlatformHttpClient {
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 60000
+                    connectTimeoutMillis = 15000
+                }
+                install(ContentNegotiation) {
+                    json(Json {
+                        ignoreUnknownKeys = true
+                        coerceInputValues = true
+                    })
+                }
+            }
+        }
+
         try {
             lateinit var refreshedAccessToken: String
             lateinit var refreshedRefreshToken: String
@@ -141,8 +157,8 @@ class WebAPIAuthorizationService : KoinComponent {
                     }
                 }
             }
-        } catch (e: NullPointerException) {
-            logger.w("exception: " + e.toString())
+        } catch (e: Exception) {
+            logger.w("HttpClient creation exception: " + e.toString())
             return createPlatformHttpClient {
                 install(HttpTimeout) {
                     requestTimeoutMillis = 60000 // 60 seconds timeout for requests
