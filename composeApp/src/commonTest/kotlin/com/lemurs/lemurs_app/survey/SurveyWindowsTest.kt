@@ -188,7 +188,7 @@ class SurveyWindowsTest {
     }
 
     @Test
-    fun `local date is the participants own date, not the servers`() {
+    fun `local date is the participants own date rather than the servers`() {
         // 07:00 in Kolkata on the 16th is still the 15th in New York.
         val earlyKolkata = at("2026-06-16", LocalTime(7, 0), kolkata)
 
