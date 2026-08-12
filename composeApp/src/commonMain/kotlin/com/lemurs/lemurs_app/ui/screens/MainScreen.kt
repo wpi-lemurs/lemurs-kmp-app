@@ -41,6 +41,7 @@ import com.lemurs.lemurs_app.ui.theme.LemurDarkerGrey
 import com.lemurs.lemurs_app.ui.theme.LemurDarkestGrey
 import com.lemurs.lemurs_app.ui.theme.LemurWhite
 import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
+import com.lemurs.lemurs_app.util.StudyShutdown
 import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
 import com.lemurs.lemurs_app.getPlatform
@@ -84,7 +85,9 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
     LaunchedEffect(currentDailyState) {
         if (currentDailyState is SurveyWindowState.StudyConcluded) {
             logger.w { "Study has concluded. Cancelling background collection." }
-            HealthDataScheduler().cancelAll()
+            // Notifications too, not just collection: on Android the pre-dawn setup
+            // alarms re-arm themselves and would otherwise keep planning days forever.
+            StudyShutdown.run(surveyAvailabilityViewModel.knownWindowNames())
         }
     }
 

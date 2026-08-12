@@ -203,7 +203,7 @@ actual class NotificationScheduler actual constructor() {
 
             val delayMinutes = TimeUnit.MILLISECONDS.toMinutes(next.timeInMillis - now.timeInMillis)
             WorkManager.getInstance(context()).enqueueUniqueWork(
-                "weekly survey notification",
+                WEEKLY_WORK_NAME,
                 ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequestBuilder<WeeklySurveyNotificationWorker>()
                     .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
@@ -217,8 +217,58 @@ actual class NotificationScheduler actual constructor() {
         }
     }
 
+    actual fun cancelAll(windowNames: List<String>) {
+        try {
+            val manager = alarmManager()
+
+            // The setup alarms first: they are what re-arm themselves each morning, so
+            // leaving them would let the chain plan a new day indefinitely.
+            SETUP_TIMES.forEachIndexed { index, _ ->
+                manager.cancel(pendingIntent(setupActionFor(index), DAILY_SETUP_REQUEST_CODE + index))
+            }
+
+            // Anything already armed for today. PendingIntent matching ignores extras, so
+            // the request code and action are what identify these.
+            windowNames.forEach { name ->
+                manager.cancel(
+                    pendingIntent(
+                        AlarmReceiver.ACTION_INITIAL_NOTIFICATION,
+                        requestCodeFor(name, KIND_INITIAL)
+                    )
+                )
+                manager.cancel(
+                    pendingIntent(
+                        AlarmReceiver.ACTION_NOTIFICATION_REMINDER,
+                        requestCodeFor(name, KIND_FIRST_REMINDER)
+                    )
+                )
+                manager.cancel(
+                    pendingIntent(
+                        AlarmReceiver.ACTION_NOTIFICATION_REMINDER,
+                        requestCodeFor(name, KIND_FINAL_REMINDER)
+                    )
+                )
+                manager.cancel(
+                    pendingIntent(
+                        AlarmReceiver.ACTION_LAST_CHANCE_NOTIFICATION,
+                        requestCodeFor(name, KIND_LAST_CHANCE)
+                    )
+                )
+            }
+
+            val workManager = WorkManager.getInstance(context())
+            workManager.cancelUniqueWork(WEEKLY_WORK_NAME)
+            windowNames.forEach { workManager.cancelUniqueWork("initial $it notification fallback") }
+
+            logger.w("Cancelled all notification alarms and work")
+        } catch (e: Exception) {
+            logger.e("Failed to cancel notifications: ${e.message}", e)
+        }
+    }
+
     companion object {
         const val DAILY_SETUP_REQUEST_CODE = 1001
+        internal const val WEEKLY_WORK_NAME = "weekly survey notification"
         private const val WEEKLY_HOUR = 21
 
         /** Primary plus two backups, in case the device is asleep or busy. */

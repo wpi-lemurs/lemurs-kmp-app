@@ -12,6 +12,7 @@ import androidx.work.workDataOf
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.datastore.NotificationTimesImpl
 import com.lemurs.lemurs_app.data.local.UseCaseResult
+import com.lemurs.lemurs_app.survey.SurveyStatus
 import com.lemurs.lemurs_app.survey.SurveyWindow
 import com.lemurs.lemurs_app.survey.SurveyWindows
 import com.lemurs.lemurs_app.survey.fetchSurveyStatus
@@ -200,11 +201,24 @@ class DailyNotificationSetupWorker(appContext: Context, workerParams: WorkerPara
             }
             prefs.edit().putString("daily_setup_completed_date", today).apply()
 
-            val windows = loadWindows()
-            if (windows.isEmpty()) {
-                logger.w("No survey windows known yet, nothing to schedule")
-                scheduler.rescheduleDailySetupsForTomorrow()
-                return Result.success()
+            val windows = when (val source = loadWindowSource()) {
+                is DailyWindowSource.Unknown -> {
+                    logger.w("No survey windows known yet, nothing to schedule")
+                    scheduler.rescheduleDailySetupsForTomorrow()
+                    return Result.success()
+                }
+
+                is DailyWindowSource.StudyConcluded -> {
+                    // Not re-armed: the setup alarms are what would plan another day, so
+                    // stopping means cancelling them. This runs without the app being
+                    // opened, which is the only way a participant who never reopens it
+                    // stops being collected from.
+                    logger.w("Study has concluded, shutting down background work")
+                    StudyShutdown.run(source.knownWindowNames)
+                    return Result.success()
+                }
+
+                is DailyWindowSource.Plan -> source.windows
             }
 
             val nowLocalTime = SurveyWindows.nowLocalTime()
@@ -248,26 +262,31 @@ class DailyNotificationSetupWorker(appContext: Context, workerParams: WorkerPara
      * This runs before dawn, when connectivity is least reliable, so a cached copy is what makes the
      * schedule survive a night with no network.
      */
-    private suspend fun loadWindows(): List<SurveyWindow> {
+    private suspend fun loadWindowSource(): DailyWindowSource {
         val status = fetchSurveyStatus()
-        if (status != null && status.windows.isNotEmpty()) {
-            notificationTimes.updateCachedWindows(
-                Json.encodeToString(ListSerializer(SurveyWindow.serializer()), status.windows)
-            )
-            return status.windows
-        }
 
-        return try {
-            val cached = notificationTimes.getCachedWindows().first()
-            if (cached.isEmpty()) {
+        val cached = try {
+            val stored = notificationTimes.getCachedWindows().first()
+            if (stored.isEmpty()) {
                 emptyList()
             } else {
-                Json.decodeFromString(ListSerializer(SurveyWindow.serializer()), cached)
+                Json.decodeFromString(ListSerializer(SurveyWindow.serializer()), stored)
             }
         } catch (e: Exception) {
             logger.e("Couldn't read cached windows: ${e.message}", e)
             emptyList()
         }
+
+        val source = DailyWindowResolver.resolve(status, cached)
+
+        // Only a live fetch is worth caching, and only once it has been accepted.
+        if (source is DailyWindowSource.Plan && !source.fromCache) {
+            notificationTimes.updateCachedWindows(
+                Json.encodeToString(ListSerializer(SurveyWindow.serializer()), source.windows)
+            )
+        }
+
+        return source
     }
 }
 
@@ -283,7 +302,17 @@ class WeeklySurveyNotificationWorker(appContext: Context, workerParams: WorkerPa
     @RequiresPermission(value = Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
         return try {
-            if (!isWeeklyOpen()) {
+            val status = fetchSurveyStatus()
+
+            // Checked before anything else: this worker re-arms itself on every path, so
+            // without this the 9pm weekly nudge outlives the study.
+            if (status != null && status.studyConcluded) {
+                logger.w("Study has concluded, cancelling the weekly notification")
+                StudyShutdown.run(status.windows.map { it.name })
+                return Result.success()
+            }
+
+            if (!isWeeklyOpen(status)) {
                 logger.w("Weekly survey not open yet, skipping notification")
                 NotificationScheduler().scheduleWeeklySurveyNotification()
                 return Result.success()
@@ -319,8 +348,7 @@ class WeeklySurveyNotificationWorker(appContext: Context, workerParams: WorkerPa
      * next-available time, which is true precisely when the survey is still locked -- and so
      * suppressed the notification on exactly the days it should have fired.
      */
-    private suspend fun isWeeklyOpen(): Boolean {
-        val status = fetchSurveyStatus()
+    private fun isWeeklyOpen(status: SurveyStatus?): Boolean {
         if (status == null) {
             logger.w("Couldn't fetch weekly availability; sending anyway")
             return true

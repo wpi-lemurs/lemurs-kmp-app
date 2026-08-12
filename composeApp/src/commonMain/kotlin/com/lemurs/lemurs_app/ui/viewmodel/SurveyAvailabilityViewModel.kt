@@ -52,6 +52,16 @@ class SurveyAvailabilityViewModel(
         }
     }
 
+    /**
+     * The window names last seen from the server.
+     *
+     * Needed to cancel per-window alarms at the end of the study, since the windows come from the
+     * database rather than being known at build time. Empty when the study has concluded and the
+     * server has stopped reporting them, which is harmless: the setup alarms are cancelled by name
+     * independently, and nothing re-arms the per-window ones once those are gone.
+     */
+    fun knownWindowNames(): List<String> = _status.value?.windows?.map { it.name }.orEmpty()
+
     /** Fetches in the background; the UI keeps showing the previous state meanwhile. */
     fun refresh() {
         viewModelScope.launch { refreshAndWait() }
