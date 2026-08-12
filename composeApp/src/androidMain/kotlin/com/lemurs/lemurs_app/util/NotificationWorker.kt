@@ -199,7 +199,6 @@ class DailyNotificationSetupWorker(appContext: Context, workerParams: WorkerPara
                 scheduler.rescheduleDailySetupsForTomorrow()
                 return Result.success()
             }
-            prefs.edit().putString("daily_setup_completed_date", today).apply()
 
             val windows = when (val source = loadWindowSource()) {
                 is DailyWindowSource.Unknown -> {
@@ -247,11 +246,25 @@ class DailyNotificationSetupWorker(appContext: Context, workerParams: WorkerPara
                 }
             }
 
+            // Recorded only now that the day is actually planned. Written up front, it
+            // marked the day done before any work had happened, so a failure here sent
+            // the 06:40 and 06:50 backups straight to the skip branch above -- leaving
+            // the redundancy able to cover a missed alarm but never a failed run.
+            prefs.edit().putString("daily_setup_completed_date", today).apply()
+
             notificationTimes.updateDate(today)
             scheduler.rescheduleDailySetupsForTomorrow()
             Result.success()
         } catch (e: Exception) {
             logger.e("Exception occurred: ${e.message}", e)
+
+            // Tomorrow's alarms are armed by this worker, so a run that dies before
+            // reaching the line above breaks the chain that restarts it: no alarm
+            // tomorrow means no run tomorrow, and notifications stop for good until the
+            // app is next opened or the phone reboots. Re-arming here is what keeps a
+            // bad morning costing one morning.
+            NotificationScheduler().rescheduleDailySetupsForTomorrow()
+
             if (runAttemptCount < 2) Result.retry() else Result.failure()
         }
     }
