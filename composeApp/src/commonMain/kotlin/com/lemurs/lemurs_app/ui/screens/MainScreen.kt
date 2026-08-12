@@ -103,7 +103,7 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
                         .padding(16.dp)
                 ) {
                     Text(
-                        text = "The survey period has concluded, you may close the app now, thank you for your participation.",
+                        text = "The survey period has concluded, you may delete the app now. Thank you for your participation.",
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                         color = LemurDarkestGrey,
