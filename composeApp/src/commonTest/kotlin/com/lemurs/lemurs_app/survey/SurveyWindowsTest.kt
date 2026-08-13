@@ -188,7 +188,7 @@ class SurveyWindowsTest {
     }
 
     @Test
-    fun `local date is the participants own date, not the servers`() {
+    fun `local date is the participants own date rather than the servers`() {
         // 07:00 in Kolkata on the 16th is still the 15th in New York.
         val earlyKolkata = at("2026-06-16", LocalTime(7, 0), kolkata)
 
@@ -208,5 +208,12 @@ class SurveyWindowsTest {
     fun `a well-formed window is recognised as such`() {
         assertTrue(morning.isWellFormed)
         assertTrue(afternoon.isWellFormed)
+    }
+
+    @Test
+    fun `evaluate returns StudyConcluded when studyConcluded is true`() {
+        val nineAm = at("2026-06-15", LocalTime(9, 0), eastern)
+        val state = SurveyWindows.evaluate(windows, emptyList(), studyConcluded = true, at = nineAm, zone = eastern)
+        assertIs<SurveyWindowState.StudyConcluded>(state)
     }
 }

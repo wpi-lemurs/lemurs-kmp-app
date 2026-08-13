@@ -283,6 +283,19 @@ actual class NotificationScheduler actual constructor() {
     }
 
     /**
+     * Removes every pending registration, for the end of the study.
+     *
+     * [windowNames] is unused on iOS: registrations are dated, so a per-window sweep would have to
+     * guess how far ahead to look. Clearing the centre outright has no such gap, and nothing should
+     * remain pending once the study is over.
+     */
+    actual fun cancelAll(windowNames: List<String>) {
+        val center = UNUserNotificationCenter.currentNotificationCenter()
+        center.removeAllPendingNotificationRequests()
+        logger.w("Cancelled all pending iOS notifications; the study is over")
+    }
+
+    /**
      * Removes the notifications registered by the previous hardcoded schedule.
      *
      * Safe to call when none exist, and worth calling on every launch: they repeat daily, so an

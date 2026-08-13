@@ -64,7 +64,7 @@ class ReminderScheduleTest {
     }
 
     @Test
-    fun `a reminder landing past the close is dropped, not clamped`() {
+    fun `a reminder landing past the close is dropped rather than clamped`() {
         // Only reachable for a window too short for the full set. Clamping would
         // deliver a reminder exactly as the survey became unavailable.
         val brief = SurveyWindow("brief", LocalTime(9, 0), LocalTime(9, 30), 3)

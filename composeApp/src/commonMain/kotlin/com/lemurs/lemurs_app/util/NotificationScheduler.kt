@@ -38,4 +38,16 @@ expect class NotificationScheduler() {
 
     /** Schedules the weekly survey notification. */
     fun scheduleWeeklySurveyNotification()
+
+    /**
+     * Cancels every scheduled notification permanently.
+     *
+     * For the end of the study, not for a completed survey. On Android the pre-dawn setup alarms
+     * re-arm themselves each morning, so stopping means cancelling them rather than simply
+     * declining to schedule anything: otherwise the chain plans a new day forever.
+     *
+     * [windowNames] are needed because per-window alarms and registrations are keyed by name, and
+     * the set of windows comes from the database rather than being known at build time.
+     */
+    fun cancelAll(windowNames: List<String>)
 }

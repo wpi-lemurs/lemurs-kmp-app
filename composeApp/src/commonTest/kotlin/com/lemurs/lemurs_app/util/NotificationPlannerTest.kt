@@ -107,7 +107,7 @@ class NotificationPlannerTest {
     // --- The drift this replaces ------------------------------------------
 
     @Test
-    fun `the morning window stays live until 13 00, not 11 00`() {
+    fun `the morning window stays live until 13 00 rather than 11 00`() {
         // The old code treated 11:00 as the morning cutoff and skipped the
         // notification, while the database said the window ran to 13:00. A
         // participant opening the app at 11:30 had a live survey and no nudge.
@@ -116,7 +116,7 @@ class NotificationPlannerTest {
     }
 
     @Test
-    fun `the afternoon window stays live until 20 00, not 18 00`() {
+    fun `the afternoon window stays live until 20 00 rather than 18 00`() {
         val plans = NotificationPlanner.plan(listOf(afternoon), LocalTime(18, 10), fixedRandom(0))
         assertIs<WindowNotificationPlan.Notify>(plans.single())
     }
