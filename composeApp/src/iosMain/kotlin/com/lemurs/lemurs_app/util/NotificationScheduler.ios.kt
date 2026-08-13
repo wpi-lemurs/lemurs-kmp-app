@@ -318,14 +318,23 @@ actual class NotificationScheduler actual constructor() {
         onDate: LocalDate? = SurveyWindows.localDate()
     ) {
         val center = UNUserNotificationCenter.currentNotificationCenter()
-        if (onDate != null) {
-            center.removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName, onDate))
-            logger.w("Cancelled pending '$windowName' notifications for $onDate after submission")
-        } else {
-            // If date is null, clear non-dated identifiers for backward compatibility
-            center.removePendingNotificationRequestsWithIdentifiers(identifiersFor(windowName, null))
-            logger.w("Cancelled pending '$windowName' notifications after submission")
+
+        // Non-dated identifiers are cleared alongside the dated ones. Last-chance
+        // notifications are registered without a date, so a dated-only sweep left them
+        // pending, as would anything registered by a build predating dated identifiers.
+        // Removing an identifier that is not pending is a no-op, so the extra names cost
+        // nothing.
+        val identifiers = buildList {
+            if (onDate != null) addAll(identifiersFor(windowName, onDate))
+            addAll(identifiersFor(windowName, null))
+            // The weekly survey is not a daily window: it is registered once under a
+            // fixed identifier rather than per date, so submitting it would otherwise
+            // never cancel its own reminder.
+            if (windowName == WEEKLY_WINDOW_NAME) add(WEEKLY_IDENTIFIER)
         }
+
+        center.removePendingNotificationRequestsWithIdentifiers(identifiers)
+        logger.w("Cancelled pending '$windowName' notifications for ${onDate ?: "any date"} after submission")
     }
 
     /** Clears pending survey notifications for [windowNames] across nearby dates before re-registering. */
@@ -356,6 +365,14 @@ actual class NotificationScheduler actual constructor() {
 
     private companion object {
         const val WEEKLY_IDENTIFIER = "weeklySurvey"
+
+        /**
+         * The window name the weekly survey submits under.
+         *
+         * Must match `WeeklyQuestionsViewModel.WEEKLY_WINDOW`, which is in a private companion
+         * and so cannot be referenced from here.
+         */
+        const val WEEKLY_WINDOW_NAME = "weekly"
         const val REWARD_BODY = "Remember you can earn \$3 for completing this survey."
 
         /**

@@ -39,6 +39,9 @@ class SurveyAvailabilityViewModel(
 
     private val _dailyState = MutableStateFlow<SurveyWindowState?>(null)
 
+    /** The last non-empty set of window names the server reported. See [knownWindowNames]. */
+    private var lastKnownWindowNames: List<String> = emptyList()
+
     /** Null until the first successful fetch, which the UI shows as a spinner. */
     val dailyState: StateFlow<SurveyWindowState?> = _dailyState.asStateFlow()
 
@@ -56,11 +59,19 @@ class SurveyAvailabilityViewModel(
      * The window names last seen from the server.
      *
      * Needed to cancel per-window alarms at the end of the study, since the windows come from the
-     * database rather than being known at build time. Empty when the study has concluded and the
-     * server has stopped reporting them, which is harmless: the setup alarms are cancelled by name
-     * independently, and nothing re-arms the per-window ones once those are gone.
+     * database rather than being known at build time.
+     *
+     * Held separately from [status] rather than read off it, because the server reports no windows
+     * once the study has concluded -- which is exactly when the names are needed. Reading the live
+     * status would hand the teardown an empty list and leave any already-armed per-window alarms
+     * running: the 06:30 setup can have armed them from cache before the app learned the study was
+     * over.
+     *
+     * Still empty if this process has never seen a window -- a fresh install, or the view model
+     * recreated after process death, opened for the first time on day 29. The setup worker covers
+     * that case, since it resolves names from the DataStore cache rather than from memory.
      */
-    fun knownWindowNames(): List<String> = _status.value?.windows?.map { it.name }.orEmpty()
+    fun knownWindowNames(): List<String> = lastKnownWindowNames
 
     /** Fetches in the background; the UI keeps showing the previous state meanwhile. */
     fun refresh() {
@@ -77,6 +88,9 @@ class SurveyAvailabilityViewModel(
             return
         }
         _status.value = fetched
+        if (fetched.windows.isNotEmpty()) {
+            lastKnownWindowNames = fetched.windows.map { it.name }
+        }
         recompute()
         logger.d("Status refreshed: $fetched")
     }

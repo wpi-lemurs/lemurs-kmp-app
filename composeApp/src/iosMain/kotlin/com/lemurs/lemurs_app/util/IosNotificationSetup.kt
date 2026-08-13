@@ -61,8 +61,12 @@ object IosNotificationSetup : KoinComponent {
                 return@launch
             }
             if (status.studyConcluded) {
+                // Every pending request, not just the legacy identifiers. Registrations
+                // run three days ahead, so simply declining to register more would leave
+                // up to three days of notifications already armed and firing after the
+                // study had ended.
                 logger.w("Study is concluded; cancelling all iOS notifications")
-                scheduler.clearLegacyNotifications()
+                scheduler.cancelAll(status.windows.map { it.name })
                 return@launch
             }
             val usable = status.windows.filter { it.isWellFormed }
