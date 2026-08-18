@@ -284,15 +284,29 @@ private fun getDemoWeeklySurvey(): List<Surveys> {
     )
 }
 
-suspend fun fetchAndParseDailySurvey(): List<Surveys> {
+/**
+ * The questions for whichever daily window is open right now, paired with that window's name.
+ *
+ * Returns null when no window is open, so a participant outside their window gets an explicit
+ * "closed" rather than an empty question list. The window is resolved from the phone's clock, so
+ * this agrees with what the home screen showed.
+ */
+suspend fun fetchAndParseDailySurvey(): Pair<String, List<Surveys>>? {
     // Return demo data if demo mode is active
     if (DemoMode.isActive) {
         Logger.withTag("Questions").d("Demo mode: returning hardcoded daily survey")
-        return getDemoDailySurvey()
+        return "morning" to getDemoDailySurvey()
     }
 
     val api = SurveysApiImpl()
-    return api.getDailySurvey()
+    val status = fetchSurveyStatus(api) ?: return null
+    val window = SurveyWindows.currentWindow(status.windows)
+    if (window == null) {
+        Logger.withTag("Questions").w("No survey window is open right now")
+        return null
+    }
+
+    return window.name to api.getDailySurvey(window.name)
 }
 
 suspend fun fetchAndParseWeeklySurvey(): List<Surveys> {

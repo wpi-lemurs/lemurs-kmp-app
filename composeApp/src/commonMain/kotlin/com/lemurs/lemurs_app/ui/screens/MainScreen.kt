@@ -22,6 +22,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,18 +35,22 @@ import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.ui.reusableComponents.GoalsModule
 import com.lemurs.lemurs_app.ui.reusableComponents.SurveyOpenButton
+import com.lemurs.lemurs_app.ui.reusableComponents.WeeklySurveyOpenButton
 import com.lemurs.lemurs_app.ui.theme.LemurButtonBlue
 import com.lemurs.lemurs_app.ui.theme.LemurDarkerGrey
 import com.lemurs.lemurs_app.ui.theme.LemurDarkestGrey
 import com.lemurs.lemurs_app.ui.theme.LemurWhite
 import com.lemurs.lemurs_app.ui.theme.LemursAppTheme
+import com.lemurs.lemurs_app.util.StudyShutdown
 import com.lemurs.lemurs_app.ui.viewmodel.ProgressViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.SurveyAvailabilityViewModel
 import com.lemurs.lemurs_app.getPlatform
+import com.lemurs.lemurs_app.health.HealthDataScheduler
+import com.lemurs.lemurs_app.survey.SurveyWindowState
 import org.koin.compose.viewmodel.koinViewModel
 
 // Platform-specific expect declaration for iOS notification scheduling
-expect fun scheduleWeeklySurveyNotificationIos(nextWeeklySurvey: String)
+expect fun registerIosNotifications()
 
 @Composable
 fun MainScreen(onNavigateTo: (String) -> Unit) {
@@ -57,30 +63,31 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
 
     LaunchedEffect(Unit) {
         progressViewModel.newRefreshProgress()
-        surveyAvailabilityViewModel.clearAvailabilityCache()
-        surveyAvailabilityViewModel.refreshAvailability()
-        logger.w("Launched Effect called ${surveyAvailabilityViewModel.getAvailability()}" )
-
-        // Enable debug mode for testing - allows taking surveys multiple times
-        // Comment out this line when not testing
-//        surveyAvailabilityViewModel.enableDebugMode()
+        surveyAvailabilityViewModel.refreshAndWait()
     }
     val currentProgress = progressViewModel.newProgress.value
+    val dailyState by surveyAvailabilityViewModel.dailyState.collectAsState()
+    val surveyStatus by surveyAvailabilityViewModel.status.collectAsState()
 
-    LaunchedEffect(currentProgress?.nextWeeklySurvey) {
-        // Only run on iOS
-        if (getPlatform().name.lowercase().contains("ios")) {
-            val nextWeeklySurvey = currentProgress?.nextWeeklySurvey
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
-            // Only schedule if availability is loaded AND the survey is closed (future date).
-            // When timeUntilWeekly is null (cache not yet loaded) or negative (currently open),
-            // skip — a subsequent recompose with fresh data will schedule correctly.
-            if (nextWeeklySurvey != null && timeUntilWeekly != null && timeUntilWeekly > 0) {
-                scheduleWeeklySurveyNotificationIos(nextWeeklySurvey)
-                logger.w { "Scheduled weekly survey notification for $nextWeeklySurvey" }
-            } else {
-                logger.w { "Skipping notification scheduling (timeUntilWeekly=$timeUntilWeekly)" }
-            }
+    // iOS registers its notifications as repeating calendar triggers rather than
+    // planning them each morning, so they are re-registered whenever fresh windows
+    // arrive. The launch-time call in iOSApp.swift runs before login and cannot
+    // fetch them, which makes this the point where a first run gets scheduled.
+    LaunchedEffect(surveyStatus) {
+        if (surveyStatus != null && getPlatform().name.lowercase().contains("ios")) {
+            registerIosNotifications()
+            logger.w { "Registered iOS notifications from fetched windows" }
+        }
+    }
+
+    val currentDailyState = dailyState
+
+    LaunchedEffect(currentDailyState) {
+        if (currentDailyState is SurveyWindowState.StudyConcluded) {
+            logger.w { "Study has concluded. Cancelling background collection." }
+            // Notifications too, not just collection: on Android the pre-dawn setup
+            // alarms re-arm themselves and would otherwise keep planning days forever.
+            StudyShutdown.run(surveyAvailabilityViewModel.knownWindowNames())
         }
     }
 
@@ -91,31 +98,53 @@ fun MainScreen(onNavigateTo: (String) -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val timeUntilDaily = surveyAvailabilityViewModel.secondsUntilAvailable("daily")
-            Text(
-                text = "Daily Survey",
-                style = MaterialTheme.typography.titleLarge,
-                color = LemurDarkestGrey,
-            )
-            if (timeUntilDaily == null) {
-                CircularProgressIndicator()
+            if (currentDailyState is SurveyWindowState.StudyConcluded) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "The survey period has concluded, you may delete the app now. Thank you for your participation.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = LemurDarkestGrey,
+                        modifier = Modifier.padding(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             } else {
-                SurveyOpenButton(onNavigate = {onNavigateTo(LemurScreen.DailyInformation.name)},  timeUntil = timeUntilDaily)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+                Text(
+                    text = "Daily Survey",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = LemurDarkestGrey,
+                )
+                if (currentDailyState == null) {
+                    CircularProgressIndicator()
+                } else {
+                    SurveyOpenButton(
+                        onNavigate = { onNavigateTo(LemurScreen.DailyInformation.name) },
+                        state = currentDailyState
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-            val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilAvailable("weekly")
-            logger.w { "(MainScreen) Weekly timeUntil: $timeUntilWeekly from availability=${surveyAvailabilityViewModel.getAvailability()}" }
-            Text(
-                text = "Weekly Survey",
-                style = MaterialTheme.typography.titleLarge,
-                color = LemurDarkestGrey,
-            )
-            if (timeUntilWeekly == null) {
-                CircularProgressIndicator()
-            } else {
-                SurveyOpenButton(onNavigate = {onNavigateTo(LemurScreen.WeeklyInformation.name)}, timeUntil = timeUntilWeekly)
-                Spacer(modifier = Modifier.height(8.dp))
+                val timeUntilWeekly = surveyAvailabilityViewModel.secondsUntilWeekly()
+                Text(
+                    text = "Weekly Survey",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = LemurDarkestGrey,
+                )
+                if (surveyStatus == null) {
+                    CircularProgressIndicator()
+                } else {
+                    WeeklySurveyOpenButton(
+                        onNavigate = { onNavigateTo(LemurScreen.WeeklyInformation.name) },
+                        secondsUntilOpen = timeUntilWeekly
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))

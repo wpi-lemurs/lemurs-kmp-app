@@ -10,8 +10,10 @@ import com.lemurs.lemurs_app.data.local.activeData.SurveyResponse
 import com.lemurs.lemurs_app.data.repositories.AppRepository
 import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
+import com.lemurs.lemurs_app.survey.SubmissionId
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseWeeklySurvey
+import com.lemurs.lemurs_app.util.cancelNotificationsForCompletedWindow
 import com.lemurs.lemurs_app.util.DemoMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -120,7 +122,9 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
                     answers = answersJson,
                     timestamp = now.toString(),
                     notificationTime = getNotificationTime().toString(),
-                    type = 2
+                    type = 2,
+                    // Assigned here so the retry path resends the same id.
+                    clientSubmissionId = SubmissionId.generate()
                 )
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)
@@ -137,45 +141,35 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
         }
     }
 
+    /**
+     * When the weekly notification that prompted this submission was sent.
+     *
+     * Reads the weekly entry specifically. The previous version checked the *daily* morning and
+     * afternoon windows, so a weekly survey — which is notified at 9 PM, outside both — always fell
+     * through to "now", and on the rare occasion it did match, it attributed the weekly submission
+     * to a daily notification.
+     */
     fun getNotificationTime(): Instant {
-        logger.w("getting notification time...")
         val notificationTimesImpl: NotificationTimesImpl by inject()
 
-        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
-
-        val morningStart = LocalTime(8, 0)
-        val morningEnd = LocalTime(13, 0)
-        val afternoonStart = LocalTime(15, 0)
-        val afternoonEnd = LocalTime(20, 0)
-        
-        // Use runBlocking to ensure we get the result synchronously
-        val notificationsStart = runBlocking {
+        return runBlocking {
             try {
-                if (now >= morningStart && now < morningEnd) {
-                    val morningTime = notificationTimesImpl.getMorningTime().first()
-                    if (morningTime.isNotEmpty()) {
-                        Instant.parse(morningTime)
-                    } else {
-                        Clock.System.now()
-                    }
-                } else if (now >= afternoonStart && now < afternoonEnd) {
-                    val afternoonTime = notificationTimesImpl.getAfternoonTime().first()
-                    if (afternoonTime.isNotEmpty()) {
-                        Instant.parse(afternoonTime)
-                    } else {
-                        Clock.System.now()
-                    }
-                } else {
+                val fired = notificationTimesImpl.getWindowTime(WEEKLY_WINDOW).first()
+                if (fired.isEmpty()) {
+                    logger.w("No weekly notification was fired - using current time")
                     Clock.System.now()
+                } else {
+                    Instant.parse(fired)
                 }
             } catch (e: Exception) {
                 logger.e("Error parsing notification time: ${e.message}")
                 Clock.System.now()
             }
         }
-        
-        logger.w("got notification time: $notificationsStart")
-        return notificationsStart
+    }
+
+    private companion object {
+        const val WEEKLY_WINDOW = "weekly"
     }
 
     suspend fun executeRequests() {
@@ -319,6 +313,8 @@ class WeeklyQuestionsViewModel : ViewModel(), KoinComponent {
 
         if(appRepository.handleSurveyResponse()){
             logger.d { "All weekly data submitted successfully" }
+            // Nothing left to remind them about this week.
+            cancelNotificationsForCompletedWindow(WEEKLY_WINDOW)
             // Reset state for next weekly survey session
             resetSurveyState()
         }

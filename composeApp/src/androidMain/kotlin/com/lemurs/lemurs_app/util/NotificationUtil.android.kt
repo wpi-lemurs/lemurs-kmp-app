@@ -18,12 +18,9 @@ import com.lemurs.lemurs_app.data.AndroidActivityLauncherProvider
 import com.lemurs.lemurs_app.data.AndroidContextProvider
 import com.lemurs.lemurs_app.data.local.UseCaseResult
 import com.lemurs.lemurs_app.R
-import com.lemurs.lemurs_app.survey.fetchAndParseAvailability
+import com.lemurs.lemurs_app.survey.SurveyWindows
+import com.lemurs.lemurs_app.survey.fetchSurveyStatus
 import kotlinx.coroutines.runBlocking
-import kotlinx.datetime.Clock
-import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
-import kotlinx.datetime.until
 
 
 actual class NotificationUtil {
@@ -36,37 +33,33 @@ actual class NotificationUtil {
         AndroidActivityLauncherProvider.activityLauncherMultiple
 
 
+    /**
+     * Whether the currently open window has already been submitted today.
+     *
+     * Used to suppress reminders for a survey the participant has already done. On any failure this
+     * returns false ("not completed"), because a redundant reminder is a much smaller harm than
+     * silently withholding one.
+     */
     actual fun checkSurveyCompleted(): Boolean {
-        // Check if context is available
         if (context == null) {
             logger.e("Context is null, cannot check survey completion")
             return false
         }
-        
-        var availability: Long?
-        var localAvailability = mutableStateOf<Map<String, Instant>?>(null)
-        try {
-            runBlocking {
-                localAvailability.value = fetchAndParseAvailability()
-            }
-        } catch (e: Exception) {
-            logger.w("Couldn't fetch survey availability data: ${e.message}")
-            //if api call fails, assume survey is available
-            return false
-        }
-        val local = localAvailability.value
-        if (local != null && local.containsKey("daily")) {
-            val now = Clock.System.now()
-            availability = now.until(local["daily"]!!, DateTimeUnit.SECOND)
 
-            var timeUp = false
-            if (availability <= 0L) {
-                timeUp = true
-            }
-            return !timeUp
-        } else {
+        val status = try {
+            runBlocking { fetchSurveyStatus() }
+        } catch (e: Exception) {
+            logger.w("Couldn't fetch survey status: ${e.message}")
+            return false
+        } ?: return false
+
+        val window = SurveyWindows.currentWindow(status.windows)
+        if (window == null) {
+            // Nothing is open, so there is nothing outstanding to be reminded about.
             return true
         }
+
+        return window.name in status.completedWindows
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)

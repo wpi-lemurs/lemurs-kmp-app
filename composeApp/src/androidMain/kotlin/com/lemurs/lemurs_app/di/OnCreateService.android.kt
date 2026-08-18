@@ -346,7 +346,7 @@ class OnCreateService(private val context: Context, private val app: Application
 
         try {
             val workManager = WorkManager.getInstance(context)
-            val notificationScheduler = NotificationScheduler("")
+            val notificationScheduler = NotificationScheduler()
 
             notificationScheduler.scheduleDailyNotificationSetup()
             notificationScheduler.scheduleWeeklySurveyNotification()

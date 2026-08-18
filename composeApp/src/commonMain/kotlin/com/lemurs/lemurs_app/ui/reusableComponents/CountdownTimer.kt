@@ -12,23 +12,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.lemurs.lemurs_app.ui.theme.LemurDarkerGrey
 import kotlinx.coroutines.delay
 
+/**
+ * Displays a ticking countdown.
+ *
+ * Purely a display: it no longer reports whether the survey is open. Openness is decided from the
+ * survey windows in the participant's timezone, so a countdown that merely reached zero was never
+ * the right signal — it drifted from the real state whenever the two disagreed.
+ *
+ * Keyed on [totalSeconds] so a refreshed value replaces the running count rather than being
+ * ignored by a stale `remember`.
+ */
 @Composable
-fun CountdownTimer(totalSeconds: Long): Boolean {
-    var timeLeft by remember { mutableStateOf(totalSeconds) }
+fun CountdownTimer(totalSeconds: Long) {
+    var timeLeft by remember(totalSeconds) { mutableStateOf(totalSeconds.coerceAtLeast(0L)) }
 
-    // Handle cases where totalSeconds is zero or negative (already available / debug mode)
-    if (totalSeconds <= 0L) {
-        return true
-    }
-
-    var timeUp = false
-    if (timeLeft <= 0L) {
-        timeUp = true
-    }
     LaunchedEffect(totalSeconds) {
-        if (timeLeft < 0L) {
-            timeLeft = 0L
-        }
         while (timeLeft > 0L) {
             delay(1000L)
             timeLeft--
@@ -41,18 +39,18 @@ fun CountdownTimer(totalSeconds: Long): Boolean {
     val seconds = timeLeft % 60
 
     Text(
-        text = if (days == 0L)
-            "${hours.toString().padStart(2, '0')}" +
+        text = when {
+            days == 0L ->
+                "${hours.toString().padStart(2, '0')}" +
                     ":${minutes.toString().padStart(2, '0')}" +
                     ":${seconds.toString().padStart(2, '0')}"
-        else if (days == 1L)
-            "${hours.toString()} Hours"
-        else
-            "${days.toString()} Days",
+
+            days == 1L -> "$hours Hours"
+            else -> "$days Days"
+        },
         style = MaterialTheme.typography.titleSmall,
         maxLines = 1,
         overflow = TextOverflow.Clip,
         color = LemurDarkerGrey
     )
-    return timeUp
 }

@@ -290,11 +290,9 @@ fun LemursTopBar(
                         if (currentScreen == LemurScreen.Audio) {
                             scope.launch {
                                 weeklyQuestionsViewModel.submitAllWeeklyData()
-                                // Invalidate cached availability so MainScreen reads fresh state
-                                surveyAvailabilityViewModel.clearAvailabilityCache()
                                 progressViewModel.refreshProgress()
                                 progressViewModel.newRefreshProgress()
-                                surveyAvailabilityViewModel.refreshAvailability()
+                                surveyAvailabilityViewModel.refreshAndWait()
                                 onNavigateTo(nextScreen)
                             }
                         } else {

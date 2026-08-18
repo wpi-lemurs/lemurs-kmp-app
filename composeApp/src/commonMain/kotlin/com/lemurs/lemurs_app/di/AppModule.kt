@@ -11,6 +11,8 @@ import com.lemurs.lemurs_app.data.datastore.getDataStore
 import com.lemurs.lemurs_app.data.datastore.getTimesDataStore
 import com.lemurs.lemurs_app.data.datastore.getHealthConnectTokensDataStore
 import com.lemurs.lemurs_app.data.repositories.AppRepository
+import com.lemurs.lemurs_app.survey.SurveysApi
+import com.lemurs.lemurs_app.survey.SurveysApiImpl
 import com.lemurs.lemurs_app.ui.viewmodel.DailyQuestionsViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.DemographicsViewModel
 import com.lemurs.lemurs_app.ui.viewmodel.ProfileViewModel
@@ -50,6 +52,7 @@ val appModule: Module = module {
         }
     }
 
+    single<SurveysApi> { SurveysApiImpl() }
     single { LemursApiServiceImpl(get()) }
     single { HealthRemoteDataSource(get()) }
     single<AppRepository> { AppRepository(get(), get(),get(), get()) }
@@ -63,7 +66,7 @@ val appModule: Module = module {
     viewModel { ProgressHistoryViewModel(get()) }
     viewModel { ProgressViewModel() }
     viewModel { SurveyInformationViewModel(get()) }
-    viewModel { SurveyAvailabilityViewModel() }
+    viewModel { SurveyAvailabilityViewModel(get()) }
     viewModel { WeeklySurveyViewModel() }
     viewModel { WritingViewModel(get()) }
     viewModel { ResourcesViewModel(get()) }

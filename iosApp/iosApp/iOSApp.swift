@@ -31,9 +31,11 @@ struct iOSApp: App {
         // Schedule background health data sync
         HealthDataTaskScheduler.shared.scheduleBackgroundHealthSync()
 
-        // Request notification permissions and schedule daily survey notifications
+        // Request notification permissions, then register survey notifications
+        // against the windows the server reports. These were previously hardcoded
+        // to 08:00 and 15:00 and had drifted from the actual windows.
         ComposeApp.NotificationUtil().requestNotificationPermission()
-        ComposeApp.NotificationUtil().scheduleDailySurveyNotifications()
+        ComposeApp.IosNotificationSetup.shared.refreshFromServer()
     }
 
     /// Request HealthKit permissions when the app starts

@@ -5,450 +5,372 @@ import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import androidx.work.Data
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import co.touchlab.kermit.Logger
+import com.lemurs.lemurs_app.data.datastore.NotificationTimesImpl
 import com.lemurs.lemurs_app.data.local.UseCaseResult
+import com.lemurs.lemurs_app.survey.SurveyStatus
+import com.lemurs.lemurs_app.survey.SurveyWindow
+import com.lemurs.lemurs_app.survey.SurveyWindows
+import com.lemurs.lemurs_app.survey.fetchSurveyStatus
+import kotlinx.coroutines.flow.first
+import kotlinx.datetime.Clock
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import org.koin.core.component.KoinComponent
-import java.util.concurrent.TimeUnit
+import org.koin.core.component.inject
 
+private const val REWARD_BODY = "Remember you can earn \$3 for completing this survey."
+
+/** Sends a notification whose text is supplied in the work request. */
 class NotificationWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams), KoinComponent {
-    val notificationUtil = NotificationUtil()
+
+    private val notificationUtil = NotificationUtil()
     private val logger = Logger.withTag("NotificationWorker")
 
-    /**
-     * calls passive data use case to do work
-     */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(value = Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        try {
+        return try {
             val title = requireNotNull(inputData.getString("title"))
             val body = requireNotNull(inputData.getString("body"))
-            
-            logger.w("NotificationWorker: Attempting to send notification - Title: $title, Body: $body")
-            
-            return when (val result = notificationUtil.sendNotificationText(title, body)) {
-                is UseCaseResult.Success<*> -> {
-                    logger.w("NotificationWorker: Successfully sent notification")
+
+            when (notificationUtil.sendNotificationText(title, body)) {
+                is UseCaseResult.Success<*> -> Result.success()
+                else -> if (runAttemptCount < 3) {
+                    Result.retry()
+                } else {
+                    // Reminders matter enough to send even if the pre-check fails.
+                    logger.w("Max retries reached, sending without checks")
+                    notificationUtil.sendNotificationWithoutCheck(title, body)
                     Result.success()
-                }
-                is UseCaseResult.Failure<*> -> {
-                    logger.e("NotificationWorker: Failed to send notification")
-                    // Retry up to 3 times, then send anyway for critical notifications
-                    if (runAttemptCount < 3) {
-                        logger.w("NotificationWorker: Retrying (attempt ${runAttemptCount + 1}/3)")
-                        Result.retry()
-                    } else {
-                        logger.w("NotificationWorker: Max retries reached, attempting to send without checks")
-                        // For critical notifications like reminders, try to send anyway
-                        try {
-                            notificationUtil.sendNotificationWithoutCheck(title, body)
-                            Result.success()
-                        } catch (e: Exception) {
-                            logger.e("NotificationWorker: Final attempt failed: ${e.message}")
-                            Result.failure()
-                        }
-                    }
-                }
-                else -> {
-                    logger.e("NotificationWorker: Unknown result, will retry")
-                    if (runAttemptCount < 2) {
-                        Result.retry()
-                    } else {
-                        Result.failure()
-                    }
                 }
             }
         } catch (e: Exception) {
-            logger.e("NotificationWorker: Exception occurred: ${e.message}", e)
-            return if (runAttemptCount < 3) {
-                Result.retry()
-            } else {
-                Result.failure()
-            }
+            logger.e("Exception occurred: ${e.message}", e)
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 }
 
-class RandomNotificationsWorker(appContext: Context, workerParams: WorkerParameters) :
+/**
+ * Sends the opening nudge for one window and schedules its two reminders.
+ *
+ * Replaces the previous separate morning and afternoon workers, which were identical apart from
+ * their strings and reminder request codes.
+ */
+class InitialSurveyNotificationWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams), KoinComponent {
 
-    val notificationUseCase = NotificationUseCase()
-
-    override suspend fun doWork(): Result {
-        return when (notificationUseCase.randomize()) {
-            is UseCaseResult.Success<*> -> Result.success()
-            is UseCaseResult.Failure<*> -> Result.retry()
-            else -> Result.retry()
-        }
-    }
-}
-
-class NotificationScheduleWorker(appContext: Context, workerParams: WorkerParameters) :
-    CoroutineWorker(appContext, workerParams), KoinComponent {
-
-    val notificationUseCase = NotificationUseCase()
-
-    val time = requireNotNull(inputData.getString("time"))
-    val delayOne = requireNotNull(inputData.getLong("delayOne", 60))
-    val delayTwo = requireNotNull(inputData.getLong("delayTwo", 105))
-    val timeLeft = requireNotNull(inputData.getInt("timeLeft", 45))
-    override suspend fun doWork(): Result {
-        return when (notificationUseCase.schedule(time, delayOne, delayTwo, timeLeft)) {
-            is UseCaseResult.Success<*> -> Result.success()
-            is UseCaseResult.Failure<*> -> Result.retry()
-            else -> Result.retry()
-        }
-    }
-}
-
-// NEW WORKER: Handles the initial morning notification
-class InitialMorningNotificationWorker(appContext: Context, workerParams: WorkerParameters) :
-    CoroutineWorker(appContext, workerParams), KoinComponent {
-
-    val notificationUtil = NotificationUtil()
-    private val logger = Logger.withTag("InitialMorningNotificationWorker")
+    private val notificationUtil = NotificationUtil()
+    private val notificationTimes: NotificationTimesImpl by inject()
+    private val logger = Logger.withTag("InitialSurveyNotificationWorker")
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(value = Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        try {
-            val title = "Please take your morning survey now."
-            val body = "Remember you can earn \$3 for completing this survey."
-            
-            logger.w("InitialMorningNotificationWorker: Sending initial morning notification")
-            
-            // After sending the initial notification, schedule the reminders using AlarmManager
-            val notificationScheduler = NotificationScheduler("morning")
-            notificationScheduler.scheduleReminderWithAlarm(
-                60, 
-                "Reminder: Please take your morning survey!", 
-                "Remember you can earn \$3 for completing this survey.",
-                NotificationScheduler.FIRST_REMINDER_REQUEST_CODE
+        val windowName = inputData.getString(KEY_WINDOW_NAME) ?: return Result.failure()
+        val firstDelay = inputData.getLong(KEY_FIRST_REMINDER, NotificationPlanner.FIRST_REMINDER_MINUTES)
+        val finalDelay = inputData.getLong(KEY_FINAL_REMINDER, NotificationPlanner.FINAL_REMINDER_MINUTES)
+
+        return try {
+            val scheduler = NotificationScheduler()
+            scheduler.scheduleReminder(
+                windowName,
+                firstDelay,
+                "Reminder: Please take your $windowName survey!",
+                REWARD_BODY,
+                isFinal = false
             )
-            notificationScheduler.scheduleReminderWithAlarm(
-                105, 
-                "Last Reminder: Please take your morning survey!", 
-                "This is your last reminder. Remember you can earn \$3 for completing this survey.",
-                NotificationScheduler.FINAL_REMINDER_REQUEST_CODE
+            scheduler.scheduleReminder(
+                windowName,
+                finalDelay,
+                "Last Reminder: Please take your $windowName survey!",
+                "This is your last reminder. $REWARD_BODY",
+                isFinal = true
             )
-            
-            val result = when (notificationUtil.sendNotificationText(title, body)) {
+
+            when (
+                notificationUtil.sendNotificationText(
+                    "Please take your $windowName survey now.",
+                    REWARD_BODY
+                )
+            ) {
                 is UseCaseResult.Success<*> -> {
-                    logger.w("InitialMorningNotificationWorker: Successfully sent morning notification and scheduled reminders")
+                    // Record when the nudge went out so the submission can be timed
+                    // against it. Nothing wrote this before, which is why
+                    // notification_start has always equalled the submission time.
+                    notificationTimes.updateWindowTime(windowName, Clock.System.now().toString())
+                    logger.w("Sent '$windowName' notification and scheduled reminders")
                     Result.success()
                 }
-                is UseCaseResult.Failure<*> -> {
-                    logger.e("InitialMorningNotificationWorker: Failed to send morning notification, will retry")
-                    Result.retry()
-                }
-                else -> {
-                    logger.e("InitialMorningNotificationWorker: Unknown result, will retry")
-                    Result.retry()
-                }
+
+                else -> Result.retry()
             }
-            
-            return result
-            
         } catch (e: Exception) {
-            logger.e("InitialMorningNotificationWorker: Exception occurred: ${e.message}", e)
-            return Result.retry()
+            logger.e("Exception for '$windowName': ${e.message}", e)
+            Result.retry()
         }
+    }
+
+    companion object {
+        const val KEY_WINDOW_NAME = "windowName"
+        const val KEY_FIRST_REMINDER = "firstReminderMinutes"
+        const val KEY_FINAL_REMINDER = "finalReminderMinutes"
+
+        fun inputFor(
+            windowName: String,
+            firstReminderMinutes: Long = NotificationPlanner.FIRST_REMINDER_MINUTES,
+            finalReminderMinutes: Long = NotificationPlanner.FINAL_REMINDER_MINUTES
+        ): Data = workDataOf(
+            KEY_WINDOW_NAME to windowName,
+            KEY_FIRST_REMINDER to firstReminderMinutes,
+            KEY_FINAL_REMINDER to finalReminderMinutes
+        )
     }
 }
 
-// NEW WORKER: Handles the initial afternoon notification
-class InitialAfternoonNotificationWorker(appContext: Context, workerParams: WorkerParameters) :
+/**
+ * Sends a single "last call" with no reminders.
+ *
+ * Used when a window is open but too little of it remains for the full set.
+ */
+class LastChanceNotificationWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams), KoinComponent {
 
-    val notificationUtil = NotificationUtil()
-    private val logger = Logger.withTag("InitialAfternoonNotificationWorker")
+    private val notificationUtil = NotificationUtil()
+    private val notificationTimes: NotificationTimesImpl by inject()
+    private val logger = Logger.withTag("LastChanceNotificationWorker")
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(value = Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        try {
-            val title = "Please take your afternoon survey now."
-            val body = "Remember you can earn \$3 for completing this survey."
-            
-            logger.w("InitialAfternoonNotificationWorker: Sending initial afternoon notification")
-            
-            // After sending the initial notification, schedule the reminders using AlarmManager
-            val notificationScheduler = NotificationScheduler("afternoon")
-            notificationScheduler.scheduleReminderWithAlarm(
-                60, 
-                "Reminder: Please take your afternoon survey!", 
-                "Remember you can earn \$3 for completing this survey.",
-                NotificationScheduler.FIRST_REMINDER_REQUEST_CODE + 100 // Offset for afternoon
-            )
-            notificationScheduler.scheduleReminderWithAlarm(
-                105, 
-                "Last Reminder: Please take your afternoon survey!", 
-                "This is your last reminder. Remember you can earn \$3 for completing this survey.",
-                NotificationScheduler.FINAL_REMINDER_REQUEST_CODE + 100 // Offset for afternoon
-            )
-            
-            val result = when (notificationUtil.sendNotificationText(title, body)) {
+        val windowName = inputData.getString(InitialSurveyNotificationWorker.KEY_WINDOW_NAME)
+            ?: return Result.failure()
+
+        return try {
+            when (
+                notificationUtil.sendNotificationText(
+                    "Last chance: your $windowName survey closes soon!",
+                    "Complete it now to earn \$3."
+                )
+            ) {
                 is UseCaseResult.Success<*> -> {
-                    logger.w("InitialAfternoonNotificationWorker: Successfully sent afternoon notification and scheduled reminders")
+                    notificationTimes.updateWindowTime(windowName, Clock.System.now().toString())
                     Result.success()
                 }
-                is UseCaseResult.Failure<*> -> {
-                    logger.e("InitialAfternoonNotificationWorker: Failed to send afternoon notification, will retry")
-                    Result.retry()
-                }
-                else -> {
-                    logger.e("InitialAfternoonNotificationWorker: Unknown result, will retry")
-                    Result.retry()
-                }
+
+                else -> Result.retry()
             }
-            
-            return result
-            
         } catch (e: Exception) {
-            logger.e("InitialAfternoonNotificationWorker: Exception occurred: ${e.message}", e)
-            return Result.retry()
+            logger.e("Exception for '$windowName': ${e.message}", e)
+            Result.retry()
         }
     }
 }
 
-// NEW WORKER: Sets up daily notification scheduling
+/**
+ * Plans and schedules the day's survey notifications.
+ *
+ * Runs from an alarm early each morning. Times are derived from the survey windows themselves via
+ * [NotificationPlanner] rather than being hardcoded, so a window changed in the database moves its
+ * notifications with it.
+ */
 class DailyNotificationSetupWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams), KoinComponent {
 
-    val notificationUseCase = NotificationUseCase()
+    private val notificationTimes: NotificationTimesImpl by inject()
     private val logger = Logger.withTag("DailyNotificationSetupWorker")
 
     override suspend fun doWork(): Result {
-        try {
-            // CRITICAL: Only allow ONE scheduler to run per day (prevent backup schedulers from running)
+        return try {
+            val scheduler = NotificationScheduler()
+
+            // Three alarms are armed for redundancy; only the first to arrive
+            // should plan the day.
+            val today = SurveyWindows.localDate().toString()
             val prefs = applicationContext.getSharedPreferences("lemurs_prefs", Context.MODE_PRIVATE)
-            val lastRunDate = prefs.getString("daily_setup_completed_date", "")
-            val todayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-            
-            if (lastRunDate == todayDate) {
-                logger.w("DailyNotificationSetupWorker: Daily scheduler already ran today ($todayDate), skipping this backup scheduler")
-                // Still reschedule for tomorrow even if skipping today
-                val notificationScheduler = NotificationScheduler("")
-                notificationScheduler.rescheduleDailySetupsForTomorrow()
+            if (prefs.getString("daily_setup_completed_date", "") == today) {
+                logger.w("Setup already ran for $today, skipping backup run")
+                scheduler.rescheduleDailySetupsForTomorrow()
                 return Result.success()
             }
-            
-            // Mark today as completed so backup schedulers won't run
-            prefs.edit().putString("daily_setup_completed_date", todayDate).apply()
-            
-            logger.w("DailyNotificationSetupWorker: Starting daily notification setup")
-            
-            // Check current time to handle late execution
-            val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-            val currentMinute = java.util.Calendar.getInstance().get(java.util.Calendar.MINUTE)
-            logger.w("DailyNotificationSetupWorker: Current time is ${currentHour}:${currentMinute}")
-            
-            // Generate random time for morning (8:00 AM - 10:59 AM to ensure reminders before noon)
-            val randomMorningHour = (8..10).random()  // 8, 9, or 10 (max 10:59 AM with minutes)
-            val randomMorningMinute = (0..59).random()
-            
-            // Generate random time for afternoon (3:00 PM - 5:59 PM to ensure reminders before 8 PM)  
-            // CRITICAL FIX: Changed from (15..18) to (15..17) to prevent notifications after 6 PM
-            val randomAfternoonHour = (15..17).random()  // 15 (3 PM), 16 (4 PM), or 17 (5 PM) only
-            val randomAfternoonMinute = (0..59).random()
-            
-            logger.w("DailyNotificationSetupWorker: Random morning time: ${randomMorningHour}:${randomMorningMinute}")
-            logger.w("DailyNotificationSetupWorker: Random afternoon time: ${randomAfternoonHour}:${randomAfternoonMinute}")
-            
-            // Schedule the initial notifications using AlarmManager for reliability
-            val notificationScheduler = NotificationScheduler("")
-            
-            // Handle morning notification based on current time
-            when {
-                currentHour < 8 -> {
-                    // Before 8 AM: Schedule morning notification normally
-                    logger.w("DailyNotificationSetupWorker: Scheduling morning notification for today at ${randomMorningHour}:${randomMorningMinute}")
-                    notificationScheduler.scheduleInitialMorningNotificationAtTime(randomMorningHour, randomMorningMinute, forceToday = false)
+
+            val windows = when (val source = loadWindowSource()) {
+                is DailyWindowSource.Unknown -> {
+                    logger.w("No survey windows known yet, nothing to schedule")
+                    scheduler.rescheduleDailySetupsForTomorrow()
+                    return Result.success()
                 }
-                currentHour < 11 -> {
-                    // Between 8-11 AM: Schedule morning notification for 30 seconds from now
-                    // This ensures we get initial + 2 reminders before 1 PM survey close
-                    logger.w("DailyNotificationSetupWorker: Late execution but survey still available, scheduling morning notification in 30 seconds")
-                    val calendar = java.util.Calendar.getInstance()
-                    calendar.add(java.util.Calendar.SECOND, 30)
-                    notificationScheduler.scheduleInitialMorningNotificationAtTime(
-                        calendar.get(java.util.Calendar.HOUR_OF_DAY),
-                        calendar.get(java.util.Calendar.MINUTE),
-                        forceToday = true  // Force scheduling for today even though time has "passed"
-                    )
+
+                is DailyWindowSource.StudyConcluded -> {
+                    // Not re-armed: the setup alarms are what would plan another day, so
+                    // stopping means cancelling them. This runs without the app being
+                    // opened, which is the only way a participant who never reopens it
+                    // stops being collected from.
+                    logger.w("Study has concluded, shutting down background work")
+                    StudyShutdown.run(source.knownWindowNames)
+                    return Result.success()
                 }
-                currentHour < 12 || (currentHour == 12 && currentMinute < 30) -> {
-                    // Between 11 AM - 12:30 PM: Survey still open but not enough time for reminders
-                    // Send just the initial notification immediately with modified message
-                    logger.w("DailyNotificationSetupWorker: Late execution (${currentHour}:${currentMinute}), sending last chance morning notification")
-                    val calendar = java.util.Calendar.getInstance()
-                    calendar.add(java.util.Calendar.SECOND, 10)
-                    // Schedule a special late morning notification without reminders
-                    notificationScheduler.scheduleLateMorningNotificationAtTime(
-                        calendar.get(java.util.Calendar.HOUR_OF_DAY),
-                        calendar.get(java.util.Calendar.MINUTE)
-                    )
-                }
-                else -> {
-                    // After 12:30 PM: Skip morning notification (too close to survey close at 1 PM)
-                    logger.w("DailyNotificationSetupWorker: Too late for morning notification (after 12:30 PM), skipping")
+
+                is DailyWindowSource.Plan -> source.windows
+            }
+
+            val nowLocalTime = SurveyWindows.nowLocalTime()
+            logger.w("Planning notifications at $nowLocalTime for ${windows.size} window(s)")
+
+            for (plan in NotificationPlanner.plan(windows, nowLocalTime)) {
+                when (plan) {
+                    is WindowNotificationPlan.Notify -> {
+                        logger.w("'${plan.windowName}' notification at ${plan.atLocalTime}")
+                        // forceToday because a setup that ran late must still fire
+                        // inside today's window rather than slipping a day.
+                        scheduler.scheduleInitialNotification(
+                            plan.windowName,
+                            plan.atLocalTime,
+                            forceToday = plan.atLocalTime <= nowLocalTime
+                        )
+                    }
+
+                    is WindowNotificationPlan.LastChance -> {
+                        logger.w("'${plan.windowName}' last chance, no reminders")
+                        scheduler.scheduleLastChanceNotification(plan.windowName)
+                    }
+
+                    is WindowNotificationPlan.Skip ->
+                        logger.w("Skipping '${plan.windowName}': ${plan.reason}")
                 }
             }
-            
-            // Handle afternoon notification based on current time
-            when {
-                currentHour < 15 -> {
-                    // Before 3 PM: Schedule afternoon notification normally
-                    logger.w("DailyNotificationSetupWorker: Scheduling afternoon notification for today at ${randomAfternoonHour}:${randomAfternoonMinute}")
-                    notificationScheduler.scheduleInitialAfternoonNotificationAtTime(randomAfternoonHour, randomAfternoonMinute, forceToday = false)
-                }
-                currentHour < 18 -> {
-                    // Between 3-6 PM: Schedule afternoon notification for 30 seconds from now
-                    // This ensures we get initial + 2 reminders before 8 PM survey close
-                    logger.w("DailyNotificationSetupWorker: Late execution but survey still available, scheduling afternoon notification in 30 seconds")
-                    val calendar = java.util.Calendar.getInstance()
-                    calendar.add(java.util.Calendar.SECOND, 30)
-                    notificationScheduler.scheduleInitialAfternoonNotificationAtTime(
-                        calendar.get(java.util.Calendar.HOUR_OF_DAY),
-                        calendar.get(java.util.Calendar.MINUTE),
-                        forceToday = true  // Force scheduling for today even though time has "passed"
-                    )
-                }
-                currentHour < 19 || (currentHour == 19 && currentMinute < 30) -> {
-                    // Between 6-7:30 PM: Survey still open but not enough time for reminders
-                    // Send just the initial notification immediately with modified message
-                    logger.w("DailyNotificationSetupWorker: Late execution (${currentHour}:${currentMinute}), sending last chance afternoon notification")
-                    val calendar = java.util.Calendar.getInstance()
-                    calendar.add(java.util.Calendar.SECOND, 10)
-                    // Schedule a special late afternoon notification without reminders
-                    notificationScheduler.scheduleLateAfternoonNotificationAtTime(
-                        calendar.get(java.util.Calendar.HOUR_OF_DAY),
-                        calendar.get(java.util.Calendar.MINUTE)
-                    )
-                }
-                else -> {
-                    // After 7:30 PM: Skip afternoon notification (too close to survey close at 8 PM)
-                    logger.w("DailyNotificationSetupWorker: Too late for afternoon notification (after 7:30 PM), skipping")
-                }
-            }
-            
-            // IMPORTANT: Reschedule tomorrow's daily setup alarms since we're using one-time alarms
-            notificationScheduler.rescheduleDailySetupsForTomorrow()
-            
-            logger.w("DailyNotificationSetupWorker: Successfully completed daily notification setup and rescheduled for tomorrow")
-            return Result.success()
-            
+
+            // Recorded only now that the day is actually planned. Written up front, it
+            // marked the day done before any work had happened, so a failure here sent
+            // the 06:40 and 06:50 backups straight to the skip branch above -- leaving
+            // the redundancy able to cover a missed alarm but never a failed run.
+            prefs.edit().putString("daily_setup_completed_date", today).apply()
+
+            notificationTimes.updateDate(today)
+            scheduler.rescheduleDailySetupsForTomorrow()
+            Result.success()
         } catch (e: Exception) {
-            logger.e("DailyNotificationSetupWorker: Exception occurred: ${e.message}", e)
-            // Retry up to 2 times for critical setup
-            return if (runAttemptCount < 2) {
-                logger.w("DailyNotificationSetupWorker: Retrying setup (attempt ${runAttemptCount + 1}/3)")
-                Result.retry()
-            } else {
-                logger.e("DailyNotificationSetupWorker: Max retries reached, setup failed")
-                Result.failure()
-            }
+            logger.e("Exception occurred: ${e.message}", e)
+
+            // Tomorrow's alarms are armed by this worker, so a run that dies before
+            // reaching the line above breaks the chain that restarts it: no alarm
+            // tomorrow means no run tomorrow, and notifications stop for good until the
+            // app is next opened or the phone reboots. Re-arming here is what keeps a
+            // bad morning costing one morning.
+            NotificationScheduler().rescheduleDailySetupsForTomorrow()
+
+            if (runAttemptCount < 2) Result.retry() else Result.failure()
         }
+    }
+
+    /**
+     * The survey windows, refreshed from the API when reachable and otherwise read from cache.
+     *
+     * This runs before dawn, when connectivity is least reliable, so a cached copy is what makes the
+     * schedule survive a night with no network.
+     */
+    private suspend fun loadWindowSource(): DailyWindowSource {
+        val status = fetchSurveyStatus()
+
+        val cached = try {
+            val stored = notificationTimes.getCachedWindows().first()
+            if (stored.isEmpty()) {
+                emptyList()
+            } else {
+                Json.decodeFromString(ListSerializer(SurveyWindow.serializer()), stored)
+            }
+        } catch (e: Exception) {
+            logger.e("Couldn't read cached windows: ${e.message}", e)
+            emptyList()
+        }
+
+        val source = DailyWindowResolver.resolve(status, cached)
+
+        // Only a live fetch is worth caching, and only once it has been accepted.
+        if (source is DailyWindowSource.Plan && !source.fromCache) {
+            notificationTimes.updateCachedWindows(
+                Json.encodeToString(ListSerializer(SurveyWindow.serializer()), source.windows)
+            )
+        }
+
+        return source
     }
 }
 
-// NEW WORKER: Handles weekly survey notifications
+/** Sends the weekly survey notification. */
 class WeeklySurveyNotificationWorker(appContext: Context, workerParams: WorkerParameters) :
     CoroutineWorker(appContext, workerParams), KoinComponent {
 
-    val notificationUtil = NotificationUtil()
+    private val notificationUtil = NotificationUtil()
+    private val notificationTimes: NotificationTimesImpl by inject()
     private val logger = Logger.withTag("WeeklySurveyNotificationWorker")
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @RequiresPermission(value = Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
-        try {
-            // Check if weekly survey is still available today at 7:00 PM
-            if (!checkWeeklySurveyAvailable()) {
-                logger.w("Weekly survey not available today, skipping notification")
+        return try {
+            val status = fetchSurveyStatus()
+
+            // Checked before anything else: this worker re-arms itself on every path, so
+            // without this the 9pm weekly nudge outlives the study.
+            if (status != null && status.studyConcluded) {
+                logger.w("Study has concluded, cancelling the weekly notification")
+                StudyShutdown.run(status.windows.map { it.name })
                 return Result.success()
             }
 
-            val title = "Time for Your Weekly Survey"
-            val body = "Don't forget your weekly survey! Earn $10 for completing it today."
-            
-            logger.w("WeeklySurveyNotificationWorker: Sending weekly survey notification")
-            
-            val result = when (notificationUtil.sendNotificationText(title, body)) {
-                is UseCaseResult.Success<*> -> {
-                    logger.w("WeeklySurveyNotificationWorker: Successfully sent weekly survey notification")
-                    
-                    // Reschedule this worker for next week (7 days from now)
-                    logger.w("WeeklySurveyNotificationWorker: Rescheduling weekly survey notification for next week")
-                    val nextWeekRequest = OneTimeWorkRequestBuilder<WeeklySurveyNotificationWorker>()
-                        .setInitialDelay(7, TimeUnit.DAYS)
-                        .setConstraints(Constraints.Builder()
-                            .setRequiresBatteryNotLow(false)
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build())
-                        .build()
+            if (!isWeeklyOpen(status)) {
+                logger.w("Weekly survey not open yet, skipping notification")
+                NotificationScheduler().scheduleWeeklySurveyNotification()
+                return Result.success()
+            }
 
-                    WorkManager.getInstance(applicationContext).enqueueUniqueWork(
-                        "weekly survey notification",
-                        ExistingWorkPolicy.REPLACE,
-                        nextWeekRequest
-                    )
-                    
-                    logger.w("WeeklySurveyNotificationWorker: Successfully rescheduled for next week")
+            when (
+                notificationUtil.sendNotificationText(
+                    "Time for Your Weekly Survey",
+                    "Don't forget your weekly survey! Earn \$10 for completing it today."
+                )
+            ) {
+                is UseCaseResult.Success<*> -> {
+                    notificationTimes.updateWindowTime(WEEKLY_WINDOW, Clock.System.now().toString())
+                    NotificationScheduler().scheduleWeeklySurveyNotification()
                     Result.success()
                 }
-                is UseCaseResult.Failure<*> -> {
-                    logger.e("WeeklySurveyNotificationWorker: Failed to send weekly survey notification, will retry")
-                    Result.retry()
-                }
-                else -> {
-                    logger.e("WeeklySurveyNotificationWorker: Unknown result, will retry")
-                    Result.retry()
-                }
+
+                else -> Result.retry()
             }
-            
-            return result
-            
         } catch (e: Exception) {
-            logger.e("WeeklySurveyNotificationWorker: Exception occurred: ${e.message}", e)
-            return Result.retry()
+            logger.e("Exception occurred: ${e.message}", e)
+            Result.retry()
         }
     }
 
-    private suspend fun checkWeeklySurveyAvailable(): Boolean {
-        // Check if weekly survey is still available at 7:00 PM today
-        val calendar = java.util.Calendar.getInstance()
-        val today7PM = java.util.Calendar.getInstance().apply {
-            set(java.util.Calendar.HOUR_OF_DAY, 19)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
+    /**
+     * Whether the weekly survey is open now.
+     *
+     * The weekly survey is gated on an absolute instant (days since enrolment), not a time of day,
+     * so this is a straight comparison against the clock.
+     *
+     * The previous version compared the wrong way round -- it asked whether 7 PM came *before* the
+     * next-available time, which is true precisely when the survey is still locked -- and so
+     * suppressed the notification on exactly the days it should have fired.
+     */
+    private fun isWeeklyOpen(status: SurveyStatus?): Boolean {
+        if (status == null) {
+            logger.w("Couldn't fetch weekly availability; sending anyway")
+            return true
         }
-        
-        // If it's not yet 7:00 PM, check if 7:00 PM is still within weekly survey availability
-        if (calendar.before(today7PM)) {
-            try {
-                val availability = com.lemurs.lemurs_app.survey.fetchAndParseAvailability()
-                val weeklyAvailability = availability["weekly"]
-                if (weeklyAvailability != null) {
-                    val now = kotlinx.datetime.Clock.System.now()
-                    val sevenPM = kotlinx.datetime.Instant.fromEpochMilliseconds(today7PM.timeInMillis)
-                    // If 7:00 PM time is before or equal to weekly survey availability, it's still available
-                    return sevenPM <= weeklyAvailability
-                }
-            } catch (e: Exception) {
-                logger.w("Couldn't check weekly survey availability: ${e.message}")
-            }
-        }
-        
-        return false
+        val nextAvailable = status.weeklyNextAvailable ?: return true
+        return nextAvailable <= Clock.System.now()
+    }
+
+    private companion object {
+        const val WEEKLY_WINDOW = "weekly"
     }
 }

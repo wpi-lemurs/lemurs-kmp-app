@@ -46,4 +46,30 @@ actual class HealthDataScheduler {
 
         workManager.enqueue(request)
     }
+
+    /**
+     * Cancels every periodic collection and upload chain.
+     *
+     * All of these are [PeriodicWorkRequestBuilder] chains, so anything left out keeps running for
+     * the life of the install. The list previously covered only the three health and bluetooth
+     * collectors, leaving screentime collection and every upload chain going indefinitely after the
+     * study had ended.
+     */
+    actual fun cancelAll() {
+        logger.w("cancelling all background collection and upload workers")
+        COLLECTION_WORK_NAMES.forEach { workManager.cancelUniqueWork(it) }
+    }
+
+    private companion object {
+        /** Must stay in step with every `enqueueUniquePeriodicWork` name in the app. */
+        val COLLECTION_WORK_NAMES = listOf(
+            "health data schedule",
+            "collect health schedule",
+            "collect bluetooth schedule",
+            "collect screentime schedule",
+            "send screentime schedule",
+            "send bluetooth schedule",
+            "send survey response schedule"
+        )
+    }
 }

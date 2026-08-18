@@ -12,11 +12,13 @@ import com.lemurs.lemurs_app.survey.Answers
 import com.lemurs.lemurs_app.survey.CompletedSurveys
 import com.lemurs.lemurs_app.survey.DangerAlertTrigger
 import com.lemurs.lemurs_app.survey.Questions
+import com.lemurs.lemurs_app.survey.SubmissionId
 import com.lemurs.lemurs_app.survey.SurveySubmission
 import com.lemurs.lemurs_app.survey.Surveys
 import com.lemurs.lemurs_app.survey.fetchAndParseDailySurvey
 import com.lemurs.lemurs_app.survey.fetchDangerAlertTriggers
 import com.lemurs.lemurs_app.survey.postDailySurvey
+import com.lemurs.lemurs_app.util.cancelNotificationsForCompletedWindow
 import com.lemurs.lemurs_app.util.DemoMode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,9 @@ import kotlinx.serialization.json.Json
 class DailyQuestionsViewModel : ViewModel(), KoinComponent {
     var surveys = mutableStateOf<List<Surveys>?>(null)
 
+    /** Which window these questions came from, so the submission is attributed to the right one. */
+    private var currentWindowName: String? = null
+
     var surveyAnswers = mutableStateOf<HashMap<Int, HashMap<Int, String>>>(hashMapOf())
     var dangerAlertTriggerQuestionIds = mutableStateOf<Set<Int>>(emptySet())
     var dangerAlertTriggerThresholds = mutableStateOf<Map<Int, Int>>(emptyMap())
@@ -63,20 +68,25 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
 
     init {
         viewModelScope.launch {
-            surveys.value = fetchAndParseDailySurvey()
-            if (surveys.value != null) {
-                surveyAnswers.value = hashMapOf()
-                for (survey in surveys.value!!) {
-                    surveyAnswers.value[survey.id] = hashMapOf()
-                }
-            }
-
+            loadDailySurvey()
             loadDangerAlertTriggers()
         }
     }
 
     suspend fun refreshDailySurvey() {
-        surveys.value = fetchAndParseDailySurvey()
+        loadDailySurvey()
+    }
+
+    private suspend fun loadDailySurvey() {
+        val fetched = fetchAndParseDailySurvey()
+        currentWindowName = fetched?.first
+        surveys.value = fetched?.second
+
+        val loaded = surveys.value ?: return
+        surveyAnswers.value = hashMapOf()
+        for (survey in loaded) {
+            surveyAnswers.value[survey.id] = hashMapOf()
+        }
     }
 
     suspend fun refreshDangerAlertTriggers() {
@@ -158,13 +168,21 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
             val completedSurvey = CompletedSurveys(surveyId, answers)
             completedSurveys.add(completedSurvey)
         }
-        val submission = SurveySubmission(now, completedSurveys, getNotificationTime())
+        // Generated once for this attempt and reused if it has to be retried, so
+        // the server can tell a resend apart from a second submission.
+        val submissionId = SubmissionId.generate()
+
+        val submission = SurveySubmission(now, completedSurveys, getNotificationTime(), submissionId)
         try {
             // Try to submit survey
             val result = postDailySurvey(submission) // Should return Boolean or Result
             if (!result.status.isSuccess()) {
                 throw Exception("Network is unreachable or server error")
             }
+
+            // Only on success: a submission that failed is queued for retry, so the
+            // participant still has the survey outstanding and should be reminded.
+            currentWindowName?.let { cancelNotificationsForCompletedWindow(it) }
         } catch (e: Exception) {
             // Save locally and schedule worker
             val surveyType = getSurveyType()
@@ -176,7 +194,8 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
                     answers = answersJson,
                     timestamp = now.toString(),
                     notificationTime = getNotificationTime().toString(),
-                    type = surveyType
+                    type = surveyType,
+                    clientSubmissionId = submissionId
                 )
                 // Save locally for retry
                 appRepository.saveSurveyResponseLocally(surveyResponse)
@@ -191,48 +210,35 @@ class DailyQuestionsViewModel : ViewModel(), KoinComponent {
         }
     }
 
-    fun getNotificationTime() : Instant{
-        logger.w("getting notification time...")
-        var notificationsStart = Clock.System.now()
+    /**
+     * When the notification that prompted this submission was sent.
+     *
+     * Keyed off the window the questions were actually fetched for, rather than re-deriving it from
+     * hardcoded hours. Falls back to now when no notification fired, which is the correct answer for
+     * a participant who opened the app of their own accord.
+     */
+    fun getNotificationTime(): Instant {
+        val windowName = currentWindowName
+        if (windowName == null) {
+            logger.w("No window recorded for this submission - using current time")
+            return Clock.System.now()
+        }
 
-        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).time
-
-        val morningStart = LocalTime(8, 0)
-        val morningEnd = LocalTime(13, 0)
-        val afternoonStart = LocalTime(15, 0)
-        val afternoonEnd = LocalTime(20, 0)
-        
-        // Use runBlocking to wait for the result and handle empty notification times
-        notificationsStart = runBlocking {
+        return runBlocking {
             try {
-                if (now >= morningStart && now < morningEnd) {
-                    val morningTime = notificationTimesImpl.getMorningTime().first()
-                    if (!morningTime.isNullOrEmpty()) {
-                        Instant.parse(morningTime)
-                    } else {
-                        logger.w("No morning notification was fired, user opened app directly - using current time")
-                        Clock.System.now()
-                    }
-                } else if (now >= afternoonStart && now < afternoonEnd) {
-                    val afternoonTime = notificationTimesImpl.getAfternoonTime().first()
-                    if (!afternoonTime.isNullOrEmpty()) {
-                        Instant.parse(afternoonTime)
-                    } else {
-                        logger.w("No afternoon notification was fired, user opened app directly - using current time")
-                        Clock.System.now()
-                    }
-                } else {
-                    logger.w("Survey completed outside normal hours - using current time")
+                val fired = notificationTimesImpl.getWindowTime(windowName).first()
+
+                if (fired.isEmpty()) {
+                    logger.w("No '$windowName' notification was fired - using current time")
                     Clock.System.now()
+                } else {
+                    Instant.parse(fired)
                 }
             } catch (e: Exception) {
-                logger.e("Error getting notification time: ${e.message}, using current time as fallback")
+                logger.e("Error getting notification time: ${e.message}, using current time")
                 Clock.System.now()
             }
         }
-        
-        logger.w("got notification time: $notificationsStart")
-        return notificationsStart
     }
 
     fun preparingSurveyRequest(){

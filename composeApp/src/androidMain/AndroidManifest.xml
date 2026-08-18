@@ -75,8 +75,10 @@
             <intent-filter>
                 <action android:name="com.lemurs.lemurs_app.DAILY_SETUP" />
                 <action android:name="com.lemurs.lemurs_app.BACKUP_DAILY_SETUP" />
-                <action android:name="com.lemurs.lemurs_app.MORNING_NOTIFICATION" />
-                <action android:name="com.lemurs.lemurs_app.AFTERNOON_NOTIFICATION" />
+                <!-- One action per kind rather than per window, so a new window
+                     in the database needs no manifest change. -->
+                <action android:name="com.lemurs.lemurs_app.INITIAL_NOTIFICATION" />
+                <action android:name="com.lemurs.lemurs_app.LAST_CHANCE_NOTIFICATION" />
                 <action android:name="com.lemurs.lemurs_app.NOTIFICATION_REMINDER" />
             </intent-filter>
         </receiver>
@@ -85,11 +87,15 @@
             android:name="com.lemurs.lemurs_app.util.BootReceiver"
             android:enabled="true"
             android:exported="false">
+            <!-- These actions carry no data, so they must not share a filter
+                 with a data element or they will never match. -->
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
+                <!-- Alarms are absolute instants, so a zone or clock change
+                     silently shifts them to the wrong local time. -->
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
 

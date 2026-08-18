@@ -17,4 +17,9 @@ expect class HealthDataScheduler() {
      * Schedule an immediate one-time health data sync for testing
      */
     fun scheduleOneTime()
+
+    /**
+     * Cancel all scheduled background health and data collection tasks
+     */
+    fun cancelAll()
 }

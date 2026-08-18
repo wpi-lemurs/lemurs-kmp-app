@@ -19,18 +19,43 @@ open class SurveyResponse() : RealmObject {
     var submitted: Boolean = false
     var surveyResponseId: Int = -1
 
-    constructor(answers: String, timestamp: String, notificationTime: String, type: Int) : this() {
+    /**
+     * The submission id assigned when this response was first attempted.
+     *
+     * Persisted so a background retry resends the *same* id. Regenerating it here would make every
+     * retry look like a fresh submission to the server, which is exactly the duplication this is
+     * meant to prevent.
+     */
+    var clientSubmissionId: String = ""
+
+    constructor(
+        answers: String,
+        timestamp: String,
+        notificationTime: String,
+        type: Int,
+        clientSubmissionId: String = ""
+    ) : this() {
         this.answers = answers
         this.timestamp = timestamp
         this.notificationTime = notificationTime
         this.type = type
+        this.clientSubmissionId = clientSubmissionId
     }
-    constructor(id: Int, answers: String, timestamp: String, notificationTime: String, type: Int) : this() {
+
+    constructor(
+        id: Int,
+        answers: String,
+        timestamp: String,
+        notificationTime: String,
+        type: Int,
+        clientSubmissionId: String = ""
+    ) : this() {
         this.localID = id
         this.answers = answers
         this.timestamp = timestamp
         this.notificationTime = notificationTime
         this.type = type
+        this.clientSubmissionId = clientSubmissionId
     }
 }
 
