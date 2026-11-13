@@ -27,8 +27,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import com.lemurs.lemurs_app.survey.Demographic
-import com.lemurs.lemurs_app.survey.fetchDemographic
+import com.lemurs.lemurs_app.survey.SurveysApiImpl
+import com.lemurs.lemurs_app.survey.fetchDemographicResult
 
 actual class MicrosoftApiAuthorizationService actual constructor(
     private var webApiService: WebAPIAuthorizationService
@@ -111,54 +111,66 @@ actual class MicrosoftApiAuthorizationService actual constructor(
         return loggedIn
     }
 
-    fun checkDemographicsEmpty(): Boolean {
+    private fun resolvePostLoginDestination(): String {
         return try {
-            var demographics: List<Demographic> = emptyList()
-            runBlocking {
-                demographics = fetchDemographic()
+            val result = runBlocking { fetchDemographicResult() }
+            when (result) {
+                is SurveysApiImpl.DemographicsLookupResult.Success -> {
+                    logger.w("fetched demographics: ${result.demographics}")
+                    if (result.demographics.isEmpty()) {
+                        LemurScreen.Demographics.name
+                    } else {
+                        LemurScreen.Main.name
+                    }
+                }
+                is SurveysApiImpl.DemographicsLookupResult.Failure -> {
+                    logger.e("Demographics lookup failed (${result.reason}); navigating to Main without triggering onboarding")
+                    LemurScreen.Main.name
+                }
             }
-            logger.w("fetched demographics: $demographics")
-            demographics.isEmpty()
         } catch (e: Exception) {
-            logger.e("Failed to fetch demographics: $e")
-            true
+            logger.e("Failed to fetch demographics ($e); navigating to Main without triggering onboarding")
+            LemurScreen.Main.name
         }
     }
 
     private fun handleBackendLoginAndNavigate(microsoftToken: String) {
-        var accessToken = ""
-        var refreshToken = ""
-        runBlocking {
-            val jwtTokenResponseJson = webApiService.accessWebApi(microsoftToken)
-            accessToken =
-                jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content.orEmpty()
-            refreshToken =
-                jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content.orEmpty()
-            jwtTokenResponseImpl.updateLemursAccessToken(accessToken)
-            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
+        val result = runBlocking {
+            webApiService.loginWithMicrosoftToken(microsoftToken)
         }
-        if (accessToken.isBlank() || refreshToken.isBlank()) {
-            logger.e("Backend /auth/login failed (blank JWT tokens). Signing out cached MSAL account and staying on login screen.")
-            mAccount = null
-            authClient?.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
-                override fun onSignOut() {
-                    logger.w("Cleared cached MSAL account after backend login rejection")
+        when (result) {
+            is WebAPIAuthorizationService.BackendLoginResult.Success -> {
+                runBlocking {
+                    jwtTokenResponseImpl.updateLemursAccessToken(result.accessToken)
+                    jwtTokenResponseImpl.updateRefreshToken(result.refreshToken)
                 }
+                logger.w("navigating out of login")
+                val destination = resolvePostLoginDestination()
+                logger.w("navigating to $destination")
+                onNavigate(destination)
+            }
+            is WebAPIAuthorizationService.BackendLoginResult.AuthRejected -> {
+                logger.e("Backend /auth/login rejected Microsoft token (HTTP ${result.statusCode}). Clearing tokens and MSAL session.")
+                runBlocking {
+                    jwtTokenResponseImpl.updateLemursAccessToken("")
+                    jwtTokenResponseImpl.updateRefreshToken("")
+                }
+                mAccount = null
+                authClient?.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
+                    override fun onSignOut() {
+                        logger.w("Cleared cached MSAL account after backend login rejection")
+                    }
 
-                override fun onError(exception: MsalException) {
-                    logger.e("Failed to clear cached MSAL account: $exception")
-                }
-            })
-            onNavigate(LemurScreen.Login.name)
-            return
-        }
-        logger.w("navigating out of login")
-        if (!checkDemographicsEmpty()) {
-            logger.w("navigating to home")
-            onNavigate(LemurScreen.Main.name)
-        } else {
-            logger.w("navigating to demographics page")
-            onNavigate(LemurScreen.Demographics.name)
+                    override fun onError(exception: MsalException) {
+                        logger.e("Failed to clear cached MSAL account: $exception")
+                    }
+                })
+                onNavigate(LemurScreen.Login.name)
+            }
+            is WebAPIAuthorizationService.BackendLoginResult.RetryableFailure -> {
+                logger.w("Backend /auth/login failed transiently (${result.reason}); preserving cached session and staying on login screen.")
+                onNavigate(LemurScreen.Login.name)
+            }
         }
     }
 

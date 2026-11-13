@@ -104,29 +104,51 @@ class SurveysApiImpl(
         }
     }
 
-    override suspend fun getDemographics(): List<Demographic> {
-        val response = client.get {
-            url {
-                protocol = URLProtocol.HTTPS
-                host = Constants.LEMURS_API_URL
-                path("/api/demographic")
-            }
-        }
-        if (response.status.value !in 200..299) {
-            Logger.withTag("MSAuth").e(
-                "GET /api/demographic failed with HTTP ${response.status.value}; returning empty list"
-            )
-            return emptyList()
-        }
+    /**
+     * Result of fetching the participant's demographics, distinguishing an empty 200 response
+     * from HTTP or deserialization failures.
+     */
+    sealed interface DemographicsLookupResult {
+        data class Success(val demographics: List<Demographic>) : DemographicsLookupResult
+        data class Failure(val statusCode: Int? = null, val reason: String) : DemographicsLookupResult
+    }
+
+    suspend fun getDemographicsResult(): DemographicsLookupResult {
         return try {
+            val response = client.get {
+                url {
+                    protocol = URLProtocol.HTTPS
+                    host = Constants.LEMURS_API_URL
+                    path("/api/demographic")
+                }
+            }
+            if (response.status.value !in 200..299) {
+                Logger.withTag("MSAuth").e(
+                    "GET /api/demographic failed with HTTP ${response.status.value}"
+                )
+                return DemographicsLookupResult.Failure(
+                    statusCode = response.status.value,
+                    reason = "HTTP ${response.status.value}"
+                )
+            }
             val body = response.body<List<Demographic>>()
             Logger.withTag("MSAuth").w("demographics from impl: $body")
-            body
+            DemographicsLookupResult.Success(body)
         } catch (e: Exception) {
             Logger.withTag("MSAuth").e(
-                "Failed to parse /api/demographic payload (${e.message}); body=${response.bodyAsText()}"
+                "Failed to fetch or parse /api/demographic payload: ${e.message}"
             )
-            emptyList()
+            DemographicsLookupResult.Failure(
+                statusCode = null,
+                reason = e.message ?: e.toString()
+            )
+        }
+    }
+
+    override suspend fun getDemographics(): List<Demographic> {
+        return when (val result = getDemographicsResult()) {
+            is DemographicsLookupResult.Success -> result.demographics
+            is DemographicsLookupResult.Failure -> emptyList()
         }
     }
 

@@ -330,17 +330,24 @@ suspend fun fetchDangerAlertTriggers(): List<DangerAlertTrigger> {
     return api.getDangerAlertTriggers()
 }
 
-suspend fun fetchDemographic() :List<Demographic>{
+suspend fun fetchDemographicResult(): SurveysApiImpl.DemographicsLookupResult {
     // Return empty list in demo mode (demographics not needed for review)
     if (DemoMode.isActive) {
         Logger.withTag("Questions").d("Demo mode: skipping demographics fetch")
-        return emptyList()
+        return SurveysApiImpl.DemographicsLookupResult.Success(emptyList())
     }
 
     Logger.withTag("Questions").w("fetching demographic")
     val api = SurveysApiImpl()
-    val dem = api.getDemographics()
+    val result = api.getDemographicsResult()
 
-    Logger.withTag("Questions").w("fetched demographic in Questions"+ dem.toString())
-    return dem
+    Logger.withTag("Questions").w("fetched demographic result in Questions: $result")
+    return result
+}
+
+suspend fun fetchDemographic() :List<Demographic>{
+    return when (val result = fetchDemographicResult()) {
+        is SurveysApiImpl.DemographicsLookupResult.Success -> result.demographics
+        is SurveysApiImpl.DemographicsLookupResult.Failure -> emptyList()
+    }
 }

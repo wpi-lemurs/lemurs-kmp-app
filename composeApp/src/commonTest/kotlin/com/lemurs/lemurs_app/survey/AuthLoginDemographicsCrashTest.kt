@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -84,5 +85,77 @@ class AuthLoginDemographicsCrashTest {
         assertEquals(1, demographics.size)
         assertEquals("age", demographics.first().keyword)
         assertEquals("20", demographics.first().value)
+    }
+
+    @Test
+    fun `loginWithMicrosoftToken distinguishes 401 auth rejection from 503 retryable failure`() = runTest {
+        val rejectedClient = createMockClient {
+            respond(content = "", status = HttpStatusCode.Unauthorized)
+        }
+        val rejectedResult = WebAPIAuthorizationService(unauthenticatedClient = rejectedClient)
+            .loginWithMicrosoftToken("bad-token")
+        assertIs<WebAPIAuthorizationService.BackendLoginResult.AuthRejected>(rejectedResult)
+        assertEquals(401, rejectedResult.statusCode)
+
+        val outageClient = createMockClient {
+            respond(content = "Service Unavailable", status = HttpStatusCode.ServiceUnavailable)
+        }
+        val outageResult = WebAPIAuthorizationService(unauthenticatedClient = outageClient)
+            .loginWithMicrosoftToken("valid-token")
+        assertIs<WebAPIAuthorizationService.BackendLoginResult.RetryableFailure>(outageResult)
+        assertEquals(503, outageResult.statusCode)
+
+        val throwingClient = createMockClient {
+            throw RuntimeException("timeout")
+        }
+        val networkResult = WebAPIAuthorizationService(unauthenticatedClient = throwingClient)
+            .loginWithMicrosoftToken("valid-token")
+        assertIs<WebAPIAuthorizationService.BackendLoginResult.RetryableFailure>(networkResult)
+        assertEquals(null, networkResult.statusCode)
+    }
+
+    @Test
+    fun `loginWithMicrosoftToken returns Success on valid 200 JSON payload`() = runTest {
+        val okClient = createMockClient {
+            respond(
+                content = """{"accessToken":"jwt-access","refreshToken":"jwt-refresh"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        }
+        val result = WebAPIAuthorizationService(unauthenticatedClient = okClient)
+            .loginWithMicrosoftToken("valid-ms-token")
+        val success = assertIs<WebAPIAuthorizationService.BackendLoginResult.Success>(result)
+        assertEquals("jwt-access", success.accessToken)
+        assertEquals("jwt-refresh", success.refreshToken)
+    }
+
+    @Test
+    fun `getDemographicsResult distinguishes HTTP or parse failures from confirmed empty 200 list`() = runTest {
+        val outageApi = SurveysApiImpl(client = createMockClient {
+            respond(content = "", status = HttpStatusCode.ServiceUnavailable)
+        })
+        val outageResult = outageApi.getDemographicsResult()
+        val outageFailure = assertIs<SurveysApiImpl.DemographicsLookupResult.Failure>(outageResult)
+        assertEquals(503, outageFailure.statusCode)
+
+        val malformedApi = SurveysApiImpl(client = createMockClient {
+            respond(
+                content = "not-json",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        })
+        assertIs<SurveysApiImpl.DemographicsLookupResult.Failure>(malformedApi.getDemographicsResult())
+
+        val emptyOkApi = SurveysApiImpl(client = createMockClient {
+            respond(
+                content = "[]",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        })
+        val emptySuccess = assertIs<SurveysApiImpl.DemographicsLookupResult.Success>(emptyOkApi.getDemographicsResult())
+        assertTrue(emptySuccess.demographics.isEmpty())
     }
 }
