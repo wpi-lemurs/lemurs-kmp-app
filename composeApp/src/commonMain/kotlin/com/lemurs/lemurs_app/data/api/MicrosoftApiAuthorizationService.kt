@@ -8,4 +8,5 @@ expect class MicrosoftApiAuthorizationService(
     fun initClient(navigate: (String) -> Unit): Boolean
     fun acquireToken()
     fun removeAccount()
+    fun setOnAuthFinished(callback: (() -> Unit)?)
 }

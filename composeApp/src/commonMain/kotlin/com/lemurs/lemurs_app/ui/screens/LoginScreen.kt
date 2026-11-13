@@ -85,6 +85,15 @@ fun LoginScreen(
     val demoTapThreshold = 5
     val tapTimeoutMs = 3000L // Reset tap count if more than 3 seconds between taps
 
+    androidx.compose.runtime.DisposableEffect(microsoftService) {
+        microsoftService.setOnAuthFinished {
+            isSigningIn = false
+        }
+        onDispose {
+            microsoftService.setOnAuthFinished(null)
+        }
+    }
+
     androidx.compose.runtime.LaunchedEffect(Unit) {
         microsoftService.initClient(onNavigateTo)
     }

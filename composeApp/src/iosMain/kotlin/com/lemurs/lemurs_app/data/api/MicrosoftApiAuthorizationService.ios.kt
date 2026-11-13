@@ -28,7 +28,12 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
     private val logger = Logger.withTag("MSAuth-iOS")
     private var navigationCallback: ((String) -> Unit)? = null
+    private var onAuthFinished: (() -> Unit)? = null
     private val mainScope = MainScope()
+
+    actual fun setOnAuthFinished(callback: (() -> Unit)?) {
+        onAuthFinished = callback
+    }
 
     // Inject the token storage
     private val jwtTokenResponseImpl: JwtTokenResponseImpl by inject()
@@ -93,6 +98,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             },
             onError = { error ->
                 logger.e("Interactive token acquisition failed: $error")
+                onAuthFinished?.invoke()
                 if (error.contains("User cancelled", ignoreCase = true)) {
                     // User cancelled - don't show error, just stay on login screen
                     logger.i("User cancelled login")
@@ -111,6 +117,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
         val bridge = IOSMSALBridgeProvider.bridge
         if (bridge == null) {
             logger.e("Swift MSAL bridge not available")
+            onAuthFinished?.invoke()
             return
         }
 
@@ -145,6 +152,8 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                     // Token expired or needs re-auth, will require interactive login
                     logger.i("Interaction required - falling back to interactive login")
                     performInteractiveAcquireToken()
+                } else {
+                    onAuthFinished?.invoke()
                 }
             }
         )
@@ -189,16 +198,19 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                     logger.w("navigating out of login")
                     val destination = resolvePostLoginDestination()
                     logger.w("navigating to $destination")
+                    onAuthFinished?.invoke()
                     navigationCallback?.invoke(destination)
                 }
                 is WebAPIAuthorizationService.BackendLoginResult.AuthRejected -> {
                     logger.e("Backend /auth/login rejected Microsoft token (HTTP ${result.statusCode}). Clearing tokens and MSAL session.")
                     jwtTokenResponseImpl.updateLemursAccessToken("")
                     jwtTokenResponseImpl.updateRefreshToken("")
+                    onAuthFinished?.invoke()
                     removeAccount()
                 }
                 is WebAPIAuthorizationService.BackendLoginResult.RetryableFailure -> {
                     logger.w("Backend /auth/login failed transiently (${result.reason}); preserving cached session and staying on login screen.")
+                    onAuthFinished?.invoke()
                     navigationCallback?.invoke(LemurScreen.Login.name)
                 }
             }

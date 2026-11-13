@@ -44,7 +44,12 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     val jwtTokenResponseImpl: JwtTokenResponseImpl by inject()
 //    lateinit var navController: NavHostController
     private lateinit var onNavigate: (String) -> Unit
+    private var onAuthFinished: (() -> Unit)? = null
     private val scopes : String = "api://b00e7cc0-f93d-4caf-9f9c-c97d8d6f6a0d/lemurs"
+
+    actual fun setOnAuthFinished(callback: (() -> Unit)?) {
+        onAuthFinished = callback
+    }
 
     /**
      * initializes the authentication client and loads the microsoft account
@@ -147,6 +152,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 logger.w("navigating out of login")
                 val destination = resolvePostLoginDestination()
                 logger.w("navigating to $destination")
+                onAuthFinished?.invoke()
                 onNavigate(destination)
             }
             is WebAPIAuthorizationService.BackendLoginResult.AuthRejected -> {
@@ -165,10 +171,12 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                         logger.e("Failed to clear cached MSAL account: $exception")
                     }
                 })
+                onAuthFinished?.invoke()
                 onNavigate(LemurScreen.Login.name)
             }
             is WebAPIAuthorizationService.BackendLoginResult.RetryableFailure -> {
                 logger.w("Backend /auth/login failed transiently (${result.reason}); preserving cached session and staying on login screen.")
+                onAuthFinished?.invoke()
                 onNavigate(LemurScreen.Login.name)
             }
         }
@@ -206,6 +214,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
         if (authClient == null) {
             logger.w("authClient is null, cannot acquire token. Make sure initClient has completed initialization.")
+            onAuthFinished?.invoke()
             return
         }
 
@@ -217,6 +226,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
         val activity = AndroidActivityProvider.activity
         if (activity == null) {
             logger.w("Activity is null, cannot acquire token interactively")
+            onAuthFinished?.invoke()
             return
         }
 
@@ -232,6 +242,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             authClient!!.acquireToken(parameters)
         } catch (e: Exception) {
             logger.w("failed to interactively acquire token: " + e.toString())
+            onAuthFinished?.invoke()
         }
         return
     }
@@ -260,6 +271,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 /* Failed to acquireToken */
                 logger.w("Authentication failed: $exception")
                 microsoftAccessToken = ""
+                onAuthFinished?.invoke()
                 if (exception is MsalClientException) {
                     /* Exception inside MSAL, more info inside MsalError.java */
                 } else if (exception is MsalServiceException) {
@@ -270,6 +282,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             override fun onCancel() {
                 /* User canceled the authentication */
                 logger.w("User cancelled login.")
+                onAuthFinished?.invoke()
             }
         }
     }
@@ -292,6 +305,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             override fun onError(exception: MsalException) {
                 /* Failed to acquireToken */
                 logger.w("Authentication failed: $exception")
+                onAuthFinished?.invoke()
                 if (exception is MsalClientException) {
                     /* Exception inside MSAL, more info inside MsalError.java */
                 } else if (exception is MsalServiceException) {

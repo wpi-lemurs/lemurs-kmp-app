@@ -112,6 +112,17 @@ class AuthLoginDemographicsCrashTest {
             .loginWithMicrosoftToken("valid-token")
         assertIs<WebAPIAuthorizationService.BackendLoginResult.RetryableFailure>(networkResult)
         assertEquals(null, networkResult.statusCode)
+
+        val nullTokenClient = createMockClient {
+            respond(
+                content = """{"accessToken":null,"refreshToken":null}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            )
+        }
+        val nullTokenResult = WebAPIAuthorizationService(unauthenticatedClient = nullTokenClient)
+            .loginWithMicrosoftToken("valid-token")
+        assertIs<WebAPIAuthorizationService.BackendLoginResult.RetryableFailure>(nullTokenResult)
     }
 
     @Test

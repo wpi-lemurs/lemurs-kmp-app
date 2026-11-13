@@ -18,6 +18,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.parseToJsonElement
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.component.KoinComponent
@@ -73,11 +74,21 @@ class WebAPIAuthorizationService(
                 return BackendLoginResult.RetryableFailure(statusCode = status, reason = "HTTP $status")
             }
             val json = parseToJsonElement(bodyText).jsonObject
-            val accessToken = json["accessToken"]?.jsonPrimitive?.content.orEmpty()
-            val refreshToken = json["refreshToken"]?.jsonPrimitive?.content.orEmpty()
+            val accessTokenPrimitive = json["accessToken"]?.jsonPrimitive
+            val refreshTokenPrimitive = json["refreshToken"]?.jsonPrimitive
+            val accessToken = if (accessTokenPrimitive?.isString == true) {
+                accessTokenPrimitive.contentOrNull.orEmpty()
+            } else {
+                ""
+            }
+            val refreshToken = if (refreshTokenPrimitive?.isString == true) {
+                refreshTokenPrimitive.contentOrNull.orEmpty()
+            } else {
+                ""
+            }
             if (accessToken.isBlank() || refreshToken.isBlank()) {
-                logger.e("Backend $LOGIN_ENDPOINT returned 2xx with blank tokens")
-                return BackendLoginResult.RetryableFailure(statusCode = status, reason = "Blank tokens in 2xx response")
+                logger.e("Backend $LOGIN_ENDPOINT returned 2xx with blank or non-string tokens")
+                return BackendLoginResult.RetryableFailure(statusCode = status, reason = "Blank or non-string tokens in 2xx response")
             }
             BackendLoginResult.Success(accessToken = accessToken, refreshToken = refreshToken)
         } catch (e: Exception) {
