@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -29,12 +30,11 @@ import kotlinx.coroutines.withContext
 private const val REQUEST_ENABLE_BT = 1
 private const val SCAN_PERIOD: Long = 10_000 // 10 seconds
 
-class BluetoothFunction(private val context: Activity, private val bluetoothDAO: BluetoothDAO) {
+class BluetoothFunction(private val context: Context, private val bluetoothDAO: BluetoothDAO) {
 
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(BluetoothManager::class.java)
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
-    private val bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
     private val logger = Logger.withTag("BluetoothFunction")
 
     private var scanning = false
@@ -44,13 +44,16 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
     private val leDeviceListAdapter = LeDeviceListAdapter()
     init {
         checkBLESupport()
-        ensureBluetoothEnabled()
     }
 
 
     /** Scans for Bluetooth devices and stores the results in the database. */
-    fun permissionsForScan() {
+    fun permissionsForScan(activity: Activity? = context as? Activity) {
         logger.w("beginning bluetooth permissions scan")
+        if (activity == null) {
+            logger.w("No Activity available to request Bluetooth permissions")
+            return
+        }
         // for Android 12 and higher app will need BLUETOOTH_SCAN and BLUETOOTH_CONNECT permissions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             logger.w("Android 12+, requesting Bluetooth SCAN and CONNECT permissions")
@@ -62,7 +65,7 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
             if (hasScanPermission != PackageManager.PERMISSION_GRANTED ||
                 hasConnectPermission != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
-                    context,
+                    activity,
                     arrayOf(
                         Manifest.permission.BLUETOOTH_SCAN,
                         Manifest.permission.BLUETOOTH_CONNECT
@@ -107,7 +110,8 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
 
     // helper functions to make the code cleaner
     private fun checkBLESupport() {
-        if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+        val pm = context.packageManager
+        if (pm != null && !pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
 //      Toast.makeText(context, "Bluetooth LE is not supported on this device", Toast.LENGTH_SHORT)
 //        .show()
             logger.w("Bluetooth LE is not supported on this device")
@@ -118,10 +122,24 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
         }
     }
 
-    private fun ensureBluetoothEnabled() {
-        if (bluetoothAdapter?.isEnabled == false) {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            ActivityCompat.startActivityForResult(context, enableBtIntent, REQUEST_ENABLE_BT, null)
+    fun ensureBluetoothEnabled(activity: Activity? = context as? Activity) {
+        if (activity == null) {
+            logger.w("No Activity available to prompt enabling Bluetooth")
+            return
+        }
+        if (!checkBluetoothPermissions()) {
+            logger.w("Cannot prompt to enable Bluetooth before BLUETOOTH_CONNECT permission is granted")
+            return
+        }
+        try {
+            if (bluetoothAdapter?.isEnabled == false) {
+                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                ActivityCompat.startActivityForResult(activity, enableBtIntent, REQUEST_ENABLE_BT, null)
+            }
+        } catch (e: SecurityException) {
+            logger.e("SecurityException while requesting to enable Bluetooth: ${e.message}", e)
+        } catch (e: Exception) {
+            logger.e("Failed to request enabling Bluetooth: ${e.message}", e)
         }
     }
 
@@ -146,6 +164,7 @@ class BluetoothFunction(private val context: Activity, private val bluetoothDAO:
             return@withContext UseCaseResult.Failure()
         }
 
+        val bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
         if (bluetoothLeScanner == null) {
             logger.e("Bluetooth LE scanner is null!")
             return@withContext UseCaseResult.Failure()

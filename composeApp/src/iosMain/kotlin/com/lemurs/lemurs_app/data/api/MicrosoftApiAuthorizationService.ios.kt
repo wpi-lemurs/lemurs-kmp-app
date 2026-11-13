@@ -2,7 +2,8 @@ package com.lemurs.lemurs_app.data.api
 
 import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.datastore.JwtTokenResponseImpl
-import com.lemurs.lemurs_app.survey.fetchDemographic
+import com.lemurs.lemurs_app.survey.SurveysApiImpl
+import com.lemurs.lemurs_app.survey.fetchDemographicResult
 import com.lemurs.lemurs_app.ui.screens.LemurScreen
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -27,7 +28,12 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
     private val logger = Logger.withTag("MSAuth-iOS")
     private var navigationCallback: ((String) -> Unit)? = null
+    private var onAuthFinished: (() -> Unit)? = null
     private val mainScope = MainScope()
+
+    actual fun setOnAuthFinished(callback: (() -> Unit)?) {
+        onAuthFinished = callback
+    }
 
     // Inject the token storage
     private val jwtTokenResponseImpl: JwtTokenResponseImpl by inject()
@@ -92,6 +98,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             },
             onError = { error ->
                 logger.e("Interactive token acquisition failed: $error")
+                onAuthFinished?.invoke()
                 if (error.contains("User cancelled", ignoreCase = true)) {
                     // User cancelled - don't show error, just stay on login screen
                     logger.i("User cancelled login")
@@ -110,6 +117,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
         val bridge = IOSMSALBridgeProvider.bridge
         if (bridge == null) {
             logger.e("Swift MSAL bridge not available")
+            onAuthFinished?.invoke()
             return
         }
 
@@ -133,7 +141,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
         bridge.acquireTokenSilently(
             onSuccess = { accessToken ->
-                logger.w("Successfully silently authenticated")
+                logger.i("Successfully silently authenticated")
                 hasAccount = true
                 handleAuthSuccess(accessToken)
             },
@@ -144,6 +152,8 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                     // Token expired or needs re-auth, will require interactive login
                     logger.i("Interaction required - falling back to interactive login")
                     performInteractiveAcquireToken()
+                } else {
+                    onAuthFinished?.invoke()
                 }
             }
         )
@@ -181,28 +191,51 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     private fun handleAuthSuccess(microsoftToken: String) {
         logger.w("Microsoft Access token: $microsoftToken")
         mainScope.launch {
-            val jwtTokenResponseJson = webApiService.accessWebApi(microsoftToken)
-            jwtTokenResponseImpl.updateLemursAccessToken(
-                jwtTokenResponseJson.jsonObject["accessToken"]!!.jsonPrimitive.content
-            )
-            jwtTokenResponseImpl.updateRefreshToken(
-                jwtTokenResponseJson.jsonObject["refreshToken"]!!.jsonPrimitive.content
-            )
-
-            logger.w("navigating out of login")
-            if (!checkDemographicsEmpty()) {
-                logger.w("navigating to home")
-                navigationCallback?.invoke(LemurScreen.Main.name)
-            } else {
-                logger.w("navigating to demographics page")
-                navigationCallback?.invoke(LemurScreen.Demographics.name)
+            when (val result = webApiService.loginWithMicrosoftToken(microsoftToken)) {
+                is WebAPIAuthorizationService.BackendLoginResult.Success -> {
+                    jwtTokenResponseImpl.updateLemursAccessToken(result.accessToken)
+                    jwtTokenResponseImpl.updateRefreshToken(result.refreshToken)
+                    logger.w("navigating out of login")
+                    val destination = resolvePostLoginDestination()
+                    logger.w("navigating to $destination")
+                    onAuthFinished?.invoke()
+                    navigationCallback?.invoke(destination)
+                }
+                is WebAPIAuthorizationService.BackendLoginResult.AuthRejected -> {
+                    logger.e("Backend /auth/login rejected Microsoft token (HTTP ${result.statusCode}). Clearing tokens and MSAL session.")
+                    jwtTokenResponseImpl.updateLemursAccessToken("")
+                    jwtTokenResponseImpl.updateRefreshToken("")
+                    onAuthFinished?.invoke()
+                    removeAccount()
+                }
+                is WebAPIAuthorizationService.BackendLoginResult.RetryableFailure -> {
+                    logger.w("Backend /auth/login failed transiently (${result.reason}); preserving cached session and staying on login screen.")
+                    onAuthFinished?.invoke()
+                    navigationCallback?.invoke(LemurScreen.Login.name)
+                }
             }
         }
     }
 
-    private suspend fun checkDemographicsEmpty(): Boolean {
-        val demographics = fetchDemographic()
-        logger.w("fetched demographics: $demographics")
-        return demographics.isEmpty()
+    private suspend fun resolvePostLoginDestination(): String {
+        return try {
+            when (val result = fetchDemographicResult()) {
+                is SurveysApiImpl.DemographicsLookupResult.Success -> {
+                    logger.w("fetched demographics: ${result.demographics}")
+                    if (result.demographics.isEmpty()) {
+                        LemurScreen.Demographics.name
+                    } else {
+                        LemurScreen.Main.name
+                    }
+                }
+                is SurveysApiImpl.DemographicsLookupResult.Failure -> {
+                    logger.e("Demographics lookup failed (${result.reason}); navigating to Main without triggering onboarding")
+                    LemurScreen.Main.name
+                }
+            }
+        } catch (e: Exception) {
+            logger.e("Failed to fetch demographics ($e); navigating to Main without triggering onboarding")
+            LemurScreen.Main.name
+        }
     }
 }

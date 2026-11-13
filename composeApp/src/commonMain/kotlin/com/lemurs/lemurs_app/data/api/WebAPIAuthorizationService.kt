@@ -18,17 +18,20 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.Json.Default.parseToJsonElement
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
-class WebAPIAuthorizationService : KoinComponent {
+class WebAPIAuthorizationService(
+    unauthenticatedClient: HttpClient? = null
+) : KoinComponent {
 
     val logger = Logger.withTag("MSAuth")
 
     //client and service for api call without authorization
-    private val httpClient = createPlatformHttpClient {
+    private val httpClient = unauthenticatedClient ?: createPlatformHttpClient {
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -42,23 +45,72 @@ class WebAPIAuthorizationService : KoinComponent {
     private var lemursApiService = LemursApiServiceImpl(httpClient)
 
     /**
+     * Result of exchanging a Microsoft access token for LEMURS backend JWT tokens.
+     */
+    sealed interface BackendLoginResult {
+        data class Success(val accessToken: String, val refreshToken: String) : BackendLoginResult
+        data class AuthRejected(val statusCode: Int, val body: String) : BackendLoginResult
+        data class RetryableFailure(val statusCode: Int? = null, val reason: String) : BackendLoginResult
+    }
+
+    /**
+     * Uses a Microsoft access token to obtain LEMURS access and refresh tokens.
+     * Distinguishes auth rejections (401/403) from retryable network/5xx failures so callers
+     * do not discard valid cached sessions on transient outages.
+     */
+    suspend fun loginWithMicrosoftToken(microsoftAccessToken: String): BackendLoginResult {
+        val LOGIN_ENDPOINT = "/auth/login"
+        return try {
+            val response = lemursApiService.submitAccessToken(microsoftAccessToken, LOGIN_ENDPOINT)
+            val bodyText = response.bodyAsText()
+            logger.w("POST $LOGIN_ENDPOINT status=${response.status.value}, body=$bodyText")
+            val status = response.status.value
+            if (status == 401 || status == 403) {
+                logger.e("Backend $LOGIN_ENDPOINT rejected Microsoft token with HTTP $status")
+                return BackendLoginResult.AuthRejected(status, bodyText)
+            }
+            if (status !in 200..299) {
+                logger.e("Backend $LOGIN_ENDPOINT failed with retryable HTTP $status")
+                return BackendLoginResult.RetryableFailure(statusCode = status, reason = "HTTP $status")
+            }
+            val json = parseToJsonElement(bodyText).jsonObject
+            val accessTokenPrimitive = json["accessToken"]?.jsonPrimitive
+            val refreshTokenPrimitive = json["refreshToken"]?.jsonPrimitive
+            val accessToken = if (accessTokenPrimitive?.isString == true) {
+                accessTokenPrimitive.contentOrNull.orEmpty()
+            } else {
+                ""
+            }
+            val refreshToken = if (refreshTokenPrimitive?.isString == true) {
+                refreshTokenPrimitive.contentOrNull.orEmpty()
+            } else {
+                ""
+            }
+            if (accessToken.isBlank() || refreshToken.isBlank()) {
+                logger.e("Backend $LOGIN_ENDPOINT returned 2xx with blank or non-string tokens")
+                return BackendLoginResult.RetryableFailure(statusCode = status, reason = "Blank or non-string tokens in 2xx response")
+            }
+            BackendLoginResult.Success(accessToken = accessToken, refreshToken = refreshToken)
+        } catch (e: Exception) {
+            logger.e("Failed to authenticate with backend $LOGIN_ENDPOINT: $e")
+            BackendLoginResult.RetryableFailure(statusCode = null, reason = e.message ?: e.toString())
+        }
+    }
+
+    /**
     uses microsoft access token to get lemurs access token and refresh token
     returns json containing lemurs access token and refresh token
      */
     suspend fun accessWebApi(
         microsoftAccessToken: String,
     ): JsonElement {
-        val LOGIN_ENDPOINT = "/auth/login"
-        val response = lemursApiService.submitAccessToken(microsoftAccessToken, LOGIN_ENDPOINT)
-        logger.w("apiResponse body: " + response.bodyAsText())
-        var jwtTokenResponseJson: JsonElement =
-            parseToJsonElement("{\"accessToken\": \"\", \"refreshToken\": \"\"}")
-        try {
-            jwtTokenResponseJson = parseToJsonElement(response.bodyAsText())
-        } catch (e: Exception) {
-            logger.w("json exception: " + e.toString())
+        return when (val result = loginWithMicrosoftToken(microsoftAccessToken)) {
+            is BackendLoginResult.Success ->
+                parseToJsonElement("{\"accessToken\": \"${result.accessToken}\", \"refreshToken\": \"${result.refreshToken}\"}")
+            is BackendLoginResult.AuthRejected,
+            is BackendLoginResult.RetryableFailure ->
+                parseToJsonElement("{\"accessToken\": \"\", \"refreshToken\": \"\"}")
         }
-        return jwtTokenResponseJson
     }
 
 

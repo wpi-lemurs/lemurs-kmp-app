@@ -18,10 +18,8 @@ import kotlin.getValue
 class BluetoothWorker(appContext: Context, workerParams: WorkerParameters):
     CoroutineWorker(appContext, workerParams), KoinComponent {
 
-
-    private val activity = requireNotNull(AndroidActivityProvider.activity)
     private val bluetoothDAO: BluetoothDAO by inject()
-    val bluetoothUseCase = BluetoothFunction(activity, bluetoothDAO)
+    val bluetoothUseCase = BluetoothFunction(appContext, bluetoothDAO)
 
     /**
      * calls passive data use case to do work

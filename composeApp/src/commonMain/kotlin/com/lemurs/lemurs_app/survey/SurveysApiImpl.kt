@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.api.WebAPIAuthorizationService
 import com.lemurs.lemurs_app.util.Constants
 import com.lemurs.lemurs_app.survey.DangerAlertTrigger
+import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -15,8 +16,9 @@ import io.ktor.http.URLProtocol
 import io.ktor.http.contentType
 import io.ktor.http.path
 
-class SurveysApiImpl() : SurveysApi {
-    val client = WebAPIAuthorizationService().getHttpClient()
+class SurveysApiImpl(
+    val client: HttpClient = WebAPIAuthorizationService().getHttpClient()
+) : SurveysApi {
 
     override suspend fun getDailySurvey(windowName: String): List<Surveys> {
         return client.get {
@@ -102,17 +104,52 @@ class SurveysApiImpl() : SurveysApi {
         }
     }
 
-    override suspend fun getDemographics(): List<Demographic> {
-        val response =  client.get {
-            url {
-                protocol = URLProtocol.HTTPS
-                host = Constants.LEMURS_API_URL
-                path("/api/demographic")
+    /**
+     * Result of fetching the participant's demographics, distinguishing an empty 200 response
+     * from HTTP or deserialization failures.
+     */
+    sealed interface DemographicsLookupResult {
+        data class Success(val demographics: List<Demographic>) : DemographicsLookupResult
+        data class Failure(val statusCode: Int? = null, val reason: String) : DemographicsLookupResult
+    }
+
+    suspend fun getDemographicsResult(): DemographicsLookupResult {
+        return try {
+            val response = client.get {
+                url {
+                    protocol = URLProtocol.HTTPS
+                    host = Constants.LEMURS_API_URL
+                    path("/api/demographic")
+                }
             }
+            if (response.status.value !in 200..299) {
+                Logger.withTag("MSAuth").e(
+                    "GET /api/demographic failed with HTTP ${response.status.value}"
+                )
+                return DemographicsLookupResult.Failure(
+                    statusCode = response.status.value,
+                    reason = "HTTP ${response.status.value}"
+                )
+            }
+            val body = response.body<List<Demographic>>()
+            Logger.withTag("MSAuth").w("demographics from impl: $body")
+            DemographicsLookupResult.Success(body)
+        } catch (e: Exception) {
+            Logger.withTag("MSAuth").e(
+                "Failed to fetch or parse /api/demographic payload: ${e.message}"
+            )
+            DemographicsLookupResult.Failure(
+                statusCode = null,
+                reason = e.message ?: e.toString()
+            )
         }
-        val body = response.body<List<Demographic>>()
-        Logger.withTag("MSAuth").w("demographics from impl: " + body.toString())
-        return body
+    }
+
+    override suspend fun getDemographics(): List<Demographic> {
+        return when (val result = getDemographicsResult()) {
+            is DemographicsLookupResult.Success -> result.demographics
+            is DemographicsLookupResult.Failure -> emptyList()
+        }
     }
 
     override suspend fun getSurveyStatus(localDate: String, tzId: String): SurveyStatus {

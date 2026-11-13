@@ -137,7 +137,8 @@ class OnCreateService(private val context: Context, private val app: Application
             activity.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
                 val allGranted = permissions.all { it.value }
                 if (allGranted) {
-                    logger.w("bluetooth permissions granted, scheduling bluetooth workers")
+                    logger.w("bluetooth permissions granted, ensuring bluetooth enabled and scheduling workers")
+                    BluetoothFunction(activity, bluetoothDAO).ensureBluetoothEnabled(activity)
                     scheduleBluetoothWorkers()
                 } else {
                     logger.w("not all bluetooth permissions granted")
@@ -218,8 +219,8 @@ class OnCreateService(private val context: Context, private val app: Application
 //            bluetoothPermissionLauncher.launch(
 //                arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
 //            )
-        val activity = requireNotNull(AndroidActivityProvider.activity)
-        val bluetoothFunction = BluetoothFunction(activity, bluetoothDAO)
+        val activity = AndroidActivityProvider.activity
+        val bluetoothFunction = BluetoothFunction(activity ?: context, bluetoothDAO)
         if (!checkBluetoothPermissions()) {
             logger.w("requesting bluetooth permissions")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -230,9 +231,10 @@ class OnCreateService(private val context: Context, private val app: Application
                     )
                 )
             } else {
-                bluetoothFunction.permissionsForScan()
+                bluetoothFunction.permissionsForScan(activity)
             }
         } else {
+            bluetoothFunction.ensureBluetoothEnabled(activity)
             scheduleBluetoothWorkers()
             scheduleRemainingWorkers()
         }
