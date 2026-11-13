@@ -112,12 +112,54 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     }
 
     fun checkDemographicsEmpty(): Boolean {
-        var demographics : List<Demographic> = emptyList()
-        runBlocking {
-            demographics = fetchDemographic()
+        return try {
+            var demographics: List<Demographic> = emptyList()
+            runBlocking {
+                demographics = fetchDemographic()
+            }
+            logger.w("fetched demographics: $demographics")
+            demographics.isEmpty()
+        } catch (e: Exception) {
+            logger.e("Failed to fetch demographics: $e")
+            true
         }
-        logger.w("fetched demographics: " + demographics.toString() )
-        return demographics.isEmpty()
+    }
+
+    private fun handleBackendLoginAndNavigate(microsoftToken: String) {
+        var accessToken = ""
+        var refreshToken = ""
+        runBlocking {
+            val jwtTokenResponseJson = webApiService.accessWebApi(microsoftToken)
+            accessToken =
+                jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content.orEmpty()
+            refreshToken =
+                jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content.orEmpty()
+            jwtTokenResponseImpl.updateLemursAccessToken(accessToken)
+            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
+        }
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            logger.e("Backend /auth/login failed (blank JWT tokens). Signing out cached MSAL account and staying on login screen.")
+            mAccount = null
+            authClient?.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
+                override fun onSignOut() {
+                    logger.w("Cleared cached MSAL account after backend login rejection")
+                }
+
+                override fun onError(exception: MsalException) {
+                    logger.e("Failed to clear cached MSAL account: $exception")
+                }
+            })
+            onNavigate(LemurScreen.Login.name)
+            return
+        }
+        logger.w("navigating out of login")
+        if (!checkDemographicsEmpty()) {
+            logger.w("navigating to home")
+            onNavigate(LemurScreen.Main.name)
+        } else {
+            logger.w("navigating to demographics page")
+            onNavigate(LemurScreen.Demographics.name)
+        }
     }
 
     /*
@@ -199,28 +241,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 /* Reload account asynchronously to get the up-to-date list. */
                 microsoftAccessToken = authenticationResult.accessToken
                 logger.w("Microsoft Access token: " + microsoftAccessToken)
-                runBlocking {
-                    val jwtTokenResponseJson =
-                        webApiService.accessWebApi(microsoftAccessToken)
-                    jwtTokenResponseImpl.updateLemursAccessToken(
-                        jwtTokenResponseJson.jsonObject.get(
-                            "accessToken"
-                        )!!.jsonPrimitive.content
-                    )
-                    jwtTokenResponseImpl.updateRefreshToken(
-                        jwtTokenResponseJson.jsonObject.get(
-                            "refreshToken"
-                        )!!.jsonPrimitive.content
-                    )
-                }
-                logger.w("navigating out of login")
-                if (!checkDemographicsEmpty()) {
-                    logger.w("navigating to home")
-                    onNavigate(LemurScreen.Main.name)
-                } else {
-                    logger.w("navigating to demographics page")
-                    onNavigate(LemurScreen.Demographics.name)
-                }
+                handleBackendLoginAndNavigate(microsoftAccessToken)
             }
 
             override fun onError(exception: MsalException) {
@@ -253,28 +274,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
                 microsoftAccessToken = authenticationResult.accessToken
                 logger.w("Access token: " + microsoftAccessToken)
-                runBlocking {
-                    val jwtTokenResponseJson =
-                        webApiService.accessWebApi(microsoftAccessToken)
-                    jwtTokenResponseImpl.updateLemursAccessToken(
-                        jwtTokenResponseJson.jsonObject.get(
-                            "accessToken"
-                        )!!.jsonPrimitive.content
-                    )
-                    jwtTokenResponseImpl.updateRefreshToken(
-                        jwtTokenResponseJson.jsonObject.get(
-                            "refreshToken"
-                        )!!.jsonPrimitive.content
-                    )
-                }
-                logger.w("navigating out of login")
-                if (!checkDemographicsEmpty()) {
-                    logger.w("navigating to home")
-                    onNavigate(LemurScreen.Main.name)
-                } else {
-                    logger.w("navigating to demographics page")
-                    onNavigate(LemurScreen.Demographics.name)
-                }
+                handleBackendLoginAndNavigate(microsoftAccessToken)
             }
 
             override fun onError(exception: MsalException) {

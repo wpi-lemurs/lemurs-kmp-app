@@ -23,12 +23,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
-class WebAPIAuthorizationService : KoinComponent {
+class WebAPIAuthorizationService(
+    unauthenticatedClient: HttpClient? = null
+) : KoinComponent {
 
     val logger = Logger.withTag("MSAuth")
 
     //client and service for api call without authorization
-    private val httpClient = createPlatformHttpClient {
+    private val httpClient = unauthenticatedClient ?: createPlatformHttpClient {
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -49,16 +51,20 @@ class WebAPIAuthorizationService : KoinComponent {
         microsoftAccessToken: String,
     ): JsonElement {
         val LOGIN_ENDPOINT = "/auth/login"
-        val response = lemursApiService.submitAccessToken(microsoftAccessToken, LOGIN_ENDPOINT)
-        logger.w("apiResponse body: " + response.bodyAsText())
-        var jwtTokenResponseJson: JsonElement =
-            parseToJsonElement("{\"accessToken\": \"\", \"refreshToken\": \"\"}")
-        try {
-            jwtTokenResponseJson = parseToJsonElement(response.bodyAsText())
+        val emptyResponse = parseToJsonElement("{\"accessToken\": \"\", \"refreshToken\": \"\"}")
+        return try {
+            val response = lemursApiService.submitAccessToken(microsoftAccessToken, LOGIN_ENDPOINT)
+            val bodyText = response.bodyAsText()
+            logger.w("POST $LOGIN_ENDPOINT status=${response.status.value}, body=$bodyText")
+            if (response.status.value !in 200..299) {
+                logger.e("Backend $LOGIN_ENDPOINT rejected Microsoft token with HTTP ${response.status.value}")
+                return emptyResponse
+            }
+            parseToJsonElement(bodyText)
         } catch (e: Exception) {
-            logger.w("json exception: " + e.toString())
+            logger.e("Failed to authenticate with backend $LOGIN_ENDPOINT: $e")
+            emptyResponse
         }
-        return jwtTokenResponseJson
     }
 
 

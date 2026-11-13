@@ -133,7 +133,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
 
         bridge.acquireTokenSilently(
             onSuccess = { accessToken ->
-                logger.w("Successfully silently authenticated")
+                logger.i("Successfully silently authenticated")
                 hasAccount = true
                 handleAuthSuccess(accessToken)
             },
@@ -182,12 +182,18 @@ actual class MicrosoftApiAuthorizationService actual constructor(
         logger.w("Microsoft Access token: $microsoftToken")
         mainScope.launch {
             val jwtTokenResponseJson = webApiService.accessWebApi(microsoftToken)
-            jwtTokenResponseImpl.updateLemursAccessToken(
-                jwtTokenResponseJson.jsonObject["accessToken"]!!.jsonPrimitive.content
-            )
-            jwtTokenResponseImpl.updateRefreshToken(
-                jwtTokenResponseJson.jsonObject["refreshToken"]!!.jsonPrimitive.content
-            )
+            val accessToken =
+                jwtTokenResponseJson.jsonObject["accessToken"]?.jsonPrimitive?.content.orEmpty()
+            val refreshToken =
+                jwtTokenResponseJson.jsonObject["refreshToken"]?.jsonPrimitive?.content.orEmpty()
+            jwtTokenResponseImpl.updateLemursAccessToken(accessToken)
+            jwtTokenResponseImpl.updateRefreshToken(refreshToken)
+
+            if (accessToken.isBlank() || refreshToken.isBlank()) {
+                logger.e("Backend /auth/login failed (blank JWT tokens). Signing out cached MSAL account and staying on login screen.")
+                removeAccount()
+                return@launch
+            }
 
             logger.w("navigating out of login")
             if (!checkDemographicsEmpty()) {
@@ -201,8 +207,13 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     }
 
     private suspend fun checkDemographicsEmpty(): Boolean {
-        val demographics = fetchDemographic()
-        logger.w("fetched demographics: $demographics")
-        return demographics.isEmpty()
+        return try {
+            val demographics = fetchDemographic()
+            logger.w("fetched demographics: $demographics")
+            demographics.isEmpty()
+        } catch (e: Exception) {
+            logger.e("Failed to fetch demographics: $e")
+            true
+        }
     }
 }

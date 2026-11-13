@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.lemurs.lemurs_app.data.api.WebAPIAuthorizationService
 import com.lemurs.lemurs_app.util.Constants
 import com.lemurs.lemurs_app.survey.DangerAlertTrigger
+import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -15,8 +16,9 @@ import io.ktor.http.URLProtocol
 import io.ktor.http.contentType
 import io.ktor.http.path
 
-class SurveysApiImpl() : SurveysApi {
-    val client = WebAPIAuthorizationService().getHttpClient()
+class SurveysApiImpl(
+    val client: HttpClient = WebAPIAuthorizationService().getHttpClient()
+) : SurveysApi {
 
     override suspend fun getDailySurvey(windowName: String): List<Surveys> {
         return client.get {
@@ -103,16 +105,29 @@ class SurveysApiImpl() : SurveysApi {
     }
 
     override suspend fun getDemographics(): List<Demographic> {
-        val response =  client.get {
+        val response = client.get {
             url {
                 protocol = URLProtocol.HTTPS
                 host = Constants.LEMURS_API_URL
                 path("/api/demographic")
             }
         }
-        val body = response.body<List<Demographic>>()
-        Logger.withTag("MSAuth").w("demographics from impl: " + body.toString())
-        return body
+        if (response.status.value !in 200..299) {
+            Logger.withTag("MSAuth").e(
+                "GET /api/demographic failed with HTTP ${response.status.value}; returning empty list"
+            )
+            return emptyList()
+        }
+        return try {
+            val body = response.body<List<Demographic>>()
+            Logger.withTag("MSAuth").w("demographics from impl: $body")
+            body
+        } catch (e: Exception) {
+            Logger.withTag("MSAuth").e(
+                "Failed to parse /api/demographic payload (${e.message}); body=${response.bodyAsText()}"
+            )
+            emptyList()
+        }
     }
 
     override suspend fun getSurveyStatus(localDate: String, tzId: String): SurveyStatus {
