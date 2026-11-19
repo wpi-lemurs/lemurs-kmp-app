@@ -185,7 +185,7 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     /*
     returns true if acct already logged in and token already acquired
      */
-    fun silentlyAcquireToken(): Boolean {
+    fun silentlyAcquireToken(fallbackToInteractive: Boolean = false): Boolean {
         val scopesList = scopes.lowercase().split(" ")
         if (mAccount != null) {
             logger.w("An account is already signed in, acquiring token silently")
@@ -193,12 +193,17 @@ actual class MicrosoftApiAuthorizationService actual constructor(
                 .fromAuthority(mAccount!!.authority)
                 .forAccount(mAccount)
                 .withScopes(scopesList)
-                .withCallback(authSilentCallback)
+                .withCallback(getAuthSilentCallback(fallbackToInteractive))
                 .build()
             try {
                 authClient!!.acquireTokenSilentAsync(silentParameters)
             } catch (e: Exception) {
                 logger.w("failed to silently acquire token: " + e.toString())
+                if (fallbackToInteractive) {
+                    performInteractiveAcquireToken()
+                } else {
+                    onAuthFinished?.invoke()
+                }
             }
             return true
         }
@@ -206,20 +211,16 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     }
 
     /**
-     * interactively acquires token by creating pop up for user to log in
-     * called by log in button
+     * Internal helper to perform the actual interactive login.
+     * Bypasses the mAccount != null silent check to avoid loops when
+     * silent acquisition requires user interaction (e.g. Broker has an account
+     * but no cached refresh token for this app).
      */
-    actual fun acquireToken() {
-        val scopesList = scopes.lowercase().split(" ")
-
-        if (authClient == null) {
-            logger.w("authClient is null, cannot acquire token. Make sure initClient has completed initialization.")
+    private fun performInteractiveAcquireToken() {
+        val client = authClient
+        if (client == null) {
+            logger.w("authClient is null, cannot acquire token interactively")
             onAuthFinished?.invoke()
-            return
-        }
-
-        if (mAccount != null) {
-            silentlyAcquireToken()
             return
         }
 
@@ -230,21 +231,42 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             return
         }
 
+        val scopesList = scopes.lowercase().split(" ")
         logger.w("acquiring token interactively")
-        val parameters = AcquireTokenParameters.Builder()
+        val parametersBuilder = AcquireTokenParameters.Builder()
             .startAuthorizationFromActivity(activity)
-            .forAccount(mAccount)
             .withScopes(scopesList)
             .withCallback(getAuthInteractiveCallback())
-            .build()
+        if (mAccount != null) {
+            parametersBuilder.forAccount(mAccount)
+        }
+        val parameters = parametersBuilder.build()
 
         try {
-            authClient!!.acquireToken(parameters)
+            client.acquireToken(parameters)
         } catch (e: Exception) {
             logger.w("failed to interactively acquire token: " + e.toString())
             onAuthFinished?.invoke()
         }
-        return
+    }
+
+    /**
+     * interactively acquires token by creating pop up for user to log in
+     * called by log in button
+     */
+    actual fun acquireToken() {
+        if (authClient == null) {
+            logger.w("authClient is null, cannot acquire token. Make sure initClient has completed initialization.")
+            onAuthFinished?.invoke()
+            return
+        }
+
+        if (mAccount != null) {
+            silentlyAcquireToken(fallbackToInteractive = true)
+            return
+        }
+
+        performInteractiveAcquireToken()
     }
 
     /**
@@ -290,8 +312,8 @@ actual class MicrosoftApiAuthorizationService actual constructor(
     /**
      * Callback used for silent acquireToken calls
      */
-    private val authSilentCallback: SilentAuthenticationCallback
-        private get() = object : SilentAuthenticationCallback {
+    private fun getAuthSilentCallback(fallbackToInteractive: Boolean): SilentAuthenticationCallback {
+        return object : SilentAuthenticationCallback {
 
             @RequiresApi(Build.VERSION_CODES.TIRAMISU)
             override fun onSuccess(authenticationResult: IAuthenticationResult) {
@@ -305,16 +327,20 @@ actual class MicrosoftApiAuthorizationService actual constructor(
             override fun onError(exception: MsalException) {
                 /* Failed to acquireToken */
                 logger.w("Authentication failed: $exception")
+                if (exception is MsalUiRequiredException && fallbackToInteractive) {
+                    logger.w("Interaction required - falling back to interactive login")
+                    performInteractiveAcquireToken()
+                    return
+                }
                 onAuthFinished?.invoke()
                 if (exception is MsalClientException) {
                     /* Exception inside MSAL, more info inside MsalError.java */
                 } else if (exception is MsalServiceException) {
                     /* Exception when communicating with the STS, likely config issue */
-                } else if (exception is MsalUiRequiredException) {
-                    /* Tokens expired or no session, retry with interactive */
                 }
             }
         }
+    }
 
     /**
      * for logging user out
